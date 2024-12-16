@@ -120,11 +120,6 @@ class SpacecraftMPC(Node):
             f'{self.namespace_prefix}/fmu/out/vehicle_angular_velocity',
             self.vehicle_angular_velocity_callback,
             qos_profile_sub)
-        self.angular_vel_sub = self.create_subscription(
-            VehicleAngularVelocity,
-            f'{self.namespace_prefix}/fmu/out/vehicle_angular_velocity',
-            self.vehicle_angular_velocity_callback,
-            qos_profile_sub)
         self.local_position_sub = self.create_subscription(
             VehicleLocalPosition,
             f'{self.namespace_prefix}/fmu/out/vehicle_local_position',
@@ -139,7 +134,6 @@ class SpacecraftMPC(Node):
         self.publisher_thrust_setpoint = self.create_publisher(VehicleThrustSetpoint, f'{self.namespace_prefix}/fmu/in/vehicle_thrust_setpoint', qos_profile_pub)
         self.publisher_torque_setpoint = self.create_publisher(VehicleTorqueSetpoint, f'{self.namespace_prefix}/fmu/in/vehicle_torque_setpoint', qos_profile_pub)
         self.predicted_path_pub = self.create_publisher(Path, f'{self.namespace_prefix}/px4_mpc/predicted_path', 10)
-        self.reference_pub = self.create_publisher(Marker, f"{self.namespace_prefix}/px4_mpc/reference", 10)
         self.reference_pub = self.create_publisher(Marker, f"{self.namespace_prefix}/px4_mpc/reference", 10)
 
         timer_period = 0.02  # seconds
@@ -232,7 +226,7 @@ class SpacecraftMPC(Node):
     def publish_rate_setpoint(self, u_pred):
         thrust_rates = u_pred[0, :]
         # Hover thrust = 0.73
-        thrust_command = thrust_rates[0:3] * 0.07  # NOTE: Tune in thrust multiplier
+        thrust_command = thrust_rates[0:3]
         rates_setpoint_msg = VehicleRatesSetpoint()
         rates_setpoint_msg.timestamp = int(Clock().now().nanoseconds / 1000)
         rates_setpoint_msg.roll  = float(thrust_rates[3])

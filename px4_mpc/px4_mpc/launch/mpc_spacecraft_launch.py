@@ -65,7 +65,7 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             parameters=[
-                {'mode': 'wrench'},
+                {'mode': 'direct_allocation'},
                 {'namespace': namespace}
             ]
         ),
