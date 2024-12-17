@@ -65,12 +65,12 @@ class SpacecraftDirectAllocationMPC():
         ocp.dims.N = N_horizon
 
         # set cost
-        Q_mat = np.diag([5e1, 5e1, 5e1,
-                         2e3, 2e3, 2e3,
-                         5e2, 5e2, 5e2, 5e2,
-                         3e2, 3e2, 3e2])
+        Q_mat = np.diag([3e1, 3e1, 3e1,
+                         2e1, 2e1, 2e2,
+                         10e2, 10e2, 10e2, 10e2,
+                         10e1, 10e1, 10e1])
         Q_e = 20 * Q_mat
-        R_mat = np.diag([1e1] * 4)
+        R_mat = np.diag([10*0.5e1] * 4)
 
         ocp.cost.cost_type = 'NONLINEAR_LS'
         ocp.cost.cost_type_e = 'NONLINEAR_LS'
@@ -80,8 +80,8 @@ class SpacecraftDirectAllocationMPC():
 
         ocp.model.cost_y_expr = cs.vertcat(model.x, model.u)
         ocp.model.cost_y_expr_e = model.x
-        ocp.cost.yref  = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        ocp.cost.yref_e = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,])
+        ocp.cost.yref  = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        ocp.cost.yref_e = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,])
 
         # set constraints
         ocp.constraints.lbu = np.array([-Fmax, -Fmax, -Fmax, -Fmax])

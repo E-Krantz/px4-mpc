@@ -57,6 +57,8 @@ from px4_msgs.msg import VehicleTorqueSetpoint
 from px4_msgs.msg import VehicleThrustSetpoint
 
 from mpc_msgs.srv import SetPose
+from time import perf_counter
+
 
 
 
@@ -144,7 +146,7 @@ class SpacecraftMPC(Node):
         self.predicted_path_pub = self.create_publisher(Path, f'{self.namespace_prefix}/px4_mpc/predicted_path', 10)
         self.reference_pub = self.create_publisher(Marker, f"{self.namespace_prefix}/px4_mpc/reference", 10)
 
-        timer_period = 0.02  # seconds
+        timer_period = 0.1  # seconds
         self.timer = self.create_timer(timer_period, self.cmdloop_callback)
 
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
@@ -290,6 +292,7 @@ class SpacecraftMPC(Node):
         self.publisher_direct_actuator.publish(actuator_outputs_msg)
 
     def cmdloop_callback(self):
+
         # Publish offboard control modes
         offboard_msg = OffboardControlMode()
         offboard_msg.timestamp = int(Clock().now().nanoseconds / 1000)
@@ -308,6 +311,7 @@ class SpacecraftMPC(Node):
         self.publisher_offboard_mode.publish(offboard_msg)
 
         error_position = self.vehicle_local_position - self.setpoint_position
+        error_attitude = self.vehicle_attitude - self.setpoint_attitude
 
         if self.mode == 'rate':
             x0 = np.array([error_position[0],
@@ -316,25 +320,29 @@ class SpacecraftMPC(Node):
                            self.vehicle_local_velocity[0],
                            self.vehicle_local_velocity[1],
                            self.vehicle_local_velocity[2],
-                           self.vehicle_attitude[0],
-                           self.vehicle_attitude[1],
-                           self.vehicle_attitude[2],
-                           self.vehicle_attitude[3]]).reshape(10, 1)
-        elif self.mode == 'direct_allocation' or self.mode == 'wrench':
+                           error_attitude[0],
+                           error_attitude[1],
+                           error_attitude[2],
+                           error_attitude[3]]).reshape(10, 1)
+        elif self.mode == 'direct_allocation':
             x0 = np.array([error_position[0],
                            error_position[1],
                            error_position[2],
                            self.vehicle_local_velocity[0],
                            self.vehicle_local_velocity[1],
                            self.vehicle_local_velocity[2],
-                           self.vehicle_attitude[0],
-                           self.vehicle_attitude[1],
-                           self.vehicle_attitude[2],
-                           self.vehicle_attitude[3],
+                           error_attitude[0],
+                           error_attitude[1],
+                           error_attitude[2],
+                           error_attitude[3],
                            self.vehicle_angular_velocity[0],
                            self.vehicle_angular_velocity[1],
                            self.vehicle_angular_velocity[2]]).reshape(13, 1)
+
+        #t1_start = perf_counter()
         u_pred, x_pred = self.mpc.solve(x0)
+        #t1_stop = perf_counter()
+        #print("Elapsed time during the whole program in seconds:",  t1_stop - t1_start)
 
         idx = 0
         predicted_path_msg = Path()
@@ -359,7 +367,10 @@ class SpacecraftMPC(Node):
         self.setpoint_position[0] = request.pose.position.x
         self.setpoint_position[1] = request.pose.position.y
         self.setpoint_position[2] = request.pose.position.z
-
+        self.setpoint_attitude[0] = request.pose.orientation.w
+        self.setpoint_attitude[1] = request.pose.orientation.x
+        self.setpoint_attitude[2] = request.pose.orientation.y
+        self.setpoint_attitude[3] = request.pose.orientation.z
         return response
     
     def get_setpoint_pose_callback(self, msg):
