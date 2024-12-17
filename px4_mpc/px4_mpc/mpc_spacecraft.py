@@ -64,7 +64,6 @@ def vector2PoseMsg(frame_id, position, attitude):
     pose_msg = PoseStamped()
     # msg.header.stamp = Clock().now().nanoseconds / 1000
     pose_msg.header.frame_id = frame_id
-    pose_msg.header.frame_id = frame_id
     pose_msg.pose.orientation.w = attitude[0]
     pose_msg.pose.orientation.x = attitude[1]
     pose_msg.pose.orientation.y = attitude[2]
@@ -81,10 +80,15 @@ class SpacecraftMPC(Node):
     def __init__(self):
         super().__init__('spacecraft_mpc')
 
-        # Declare and retrieve the namespace parameter
-        self.declare_parameter('namespace', '')  # Default to empty namespace
-        self.namespace = self.get_parameter('namespace').value
+        # Get mode; rate, wrench, direct_allocation
+        self.mode = self.declare_parameter('mode', 'wrench').value
+
+        # Get namespace
+        self.namespace = self.declare_parameter('namespace', '').value
         self.namespace_prefix = f'/{self.namespace}' if self.namespace else ''
+
+        # Get setpoint from rviz (true/false)
+        self.setpoint_from_rviz = self.declare_parameter('setpoint_from_rviz', False).value
 
         # QoS profiles
         qos_profile_pub = QoSProfile(
@@ -100,9 +104,6 @@ class SpacecraftMPC(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=0
         )
-
-        # Get mode; rate, wrench, direct_allocation
-        self.mode = self.declare_parameter('mode', 'rate').value
 
         self.status_sub = self.create_subscription(
             VehicleStatus,
@@ -126,8 +127,15 @@ class SpacecraftMPC(Node):
             self.vehicle_local_position_callback,
             qos_profile_sub)
 
-        self.set_pose_srv = self.create_service(SetPose, f'{self.namespace_prefix}/set_pose', self.add_set_pos_callback)
-
+        if self.setpoint_from_rviz:
+            self.set_pose_srv = self.create_service(SetPose, f'{self.namespace_prefix}/set_pose', self.add_set_pos_callback)
+        else:
+            self.setpoint_pose_sub = self.create_subscription(
+                PoseStamped,
+                f'{self.namespace_prefix}/px4_mpc/setpoint_pose',
+                self.get_setpoint_pose_callback,
+                0)
+        
         self.publisher_offboard_mode = self.create_publisher(OffboardControlMode, f'{self.namespace_prefix}/fmu/in/offboard_control_mode', qos_profile_pub)
         self.publisher_rates_setpoint = self.create_publisher(VehicleRatesSetpoint, f'{self.namespace_prefix}/fmu/in/vehicle_rates_setpoint', qos_profile_pub)
         self.publisher_direct_actuator = self.create_publisher(ActuatorMotors, f'{self.namespace_prefix}/fmu/in/actuator_motors', qos_profile_pub)
@@ -164,6 +172,7 @@ class SpacecraftMPC(Node):
         self.vehicle_angular_velocity = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
         self.setpoint_position = np.array([1.0, 0.0, 0.0])
+        self.setpoint_attitude = np.array([1.0, 0.0, 0.0, 0.0])
 
     def vehicle_attitude_callback(self, msg):
         # TODO: handle NED->ENU transformation
@@ -332,7 +341,7 @@ class SpacecraftMPC(Node):
         for predicted_state in x_pred:
             idx = idx + 1
             # Publish time history of the vehicle path
-            predicted_pose_msg = vector2PoseMsg('map', predicted_state[0:3] + self.setpoint_position, np.array([1.0, 0.0, 0.0, 0.0]))
+            predicted_pose_msg = vector2PoseMsg('map', predicted_state[0:3] + self.setpoint_position, self.setpoint_attitude)
             predicted_path_msg.header = predicted_pose_msg.header
             predicted_path_msg.poses.append(predicted_pose_msg)
         self.predicted_path_pub.publish(predicted_path_msg)
@@ -352,6 +361,15 @@ class SpacecraftMPC(Node):
         self.setpoint_position[2] = request.pose.position.z
 
         return response
+    
+    def get_setpoint_pose_callback(self, msg):
+        self.setpoint_position[0] = msg.pose.position.x
+        self.setpoint_position[1] = msg.pose.position.y
+        self.setpoint_position[2] = msg.pose.position.z
+        self.setpoint_attitude[0] = msg.pose.orientation.w
+        self.setpoint_attitude[1] = msg.pose.orientation.x
+        self.setpoint_attitude[2] = msg.pose.orientation.y
+        self.setpoint_attitude[3] = msg.pose.orientation.z
 
 
 
