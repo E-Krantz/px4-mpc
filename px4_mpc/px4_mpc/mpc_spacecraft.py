@@ -324,7 +324,7 @@ class SpacecraftMPC(Node):
                            error_attitude[1],
                            error_attitude[2],
                            error_attitude[3]]).reshape(10, 1)
-        elif self.mode == 'direct_allocation':
+        elif self.mode == 'direct_allocation' or self.mode == 'wrench':
             x0 = np.array([error_position[0],
                            error_position[1],
                            error_position[2],
