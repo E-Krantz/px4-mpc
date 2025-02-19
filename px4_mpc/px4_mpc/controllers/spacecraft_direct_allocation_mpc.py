@@ -34,6 +34,7 @@
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver
 import numpy as np
 import scipy.linalg
+from scipy.linalg import block_diag
 import casadi as cs
 import time
 
@@ -68,10 +69,10 @@ class SpacecraftDirectAllocationMPC():
         # set cost
         Q_mat = np.diag([5e1, 5e1, 5e1,
                          1e1, 1e1, 1e1,
-                         8e3,
+                         4e2,
                          1e1, 1e1, 1e1])
         Q_e = 20 * Q_mat
-        R_mat = np.diag([1e1] * 4)
+        R_mat = np.diag([5e1] * 4)
 
         # References:
         x_ref = cs.MX.sym('x_ref', (13, 1))
@@ -82,34 +83,66 @@ class SpacecraftDirectAllocationMPC():
         # u : Fx,Fy,Fz,Mx,My,Mz     , R6
         x = ocp.model.x
         u = ocp.model.u
-
-        x_error = x[0:3] - x_ref[0:3]
-        x_error = cs.vertcat(x_error, x[3:6] - x_ref[3:6])
-        x_error = cs.vertcat(x_error, 1 - (x[6:10].T @ x_ref[6:10])**2)
-        x_error = cs.vertcat(x_error, x[10:13] - x_ref[10:13])
-        u_error = u - u_ref
-
         ocp.model.p = cs.vertcat(x_ref, u_ref)
 
-        # define cost with parametric reference
-        ocp.cost.cost_type = 'EXTERNAL'
-        ocp.cost.cost_type_e = 'EXTERNAL'
+        useExternalCost = False
+        if useExternalCost:
+            # define cost with parametric reference
+            ocp.cost.cost_type = 'EXTERNAL'
+            ocp.cost.cost_type_e = 'EXTERNAL'
 
-        ocp.model.cost_expr_ext_cost = x_error.T @ Q_mat @ x_error + u_error.T @ R_mat @ u_error
-        ocp.model.cost_expr_ext_cost_e = x_error.T @ Q_e @ x_error
+            x_error = x[0:3] - x_ref[0:3]
+            x_error = cs.vertcat(x_error, x[3:6] - x_ref[3:6])
+            x_error = cs.vertcat(x_error, 1 - (x[6:10].T @ x_ref[6:10])**2)
+            x_error = cs.vertcat(x_error, x[10:13] - x_ref[10:13])
+            u_error = u - u_ref
+
+            ocp.model.cost_expr_ext_cost = x_error.T @ Q_mat @ x_error + u_error.T @ R_mat @ u_error
+            ocp.model.cost_expr_ext_cost_e = x_error.T @ Q_e @ x_error
+        
+        else:
+            # Set cost type to NONLINEAR_LS
+            ocp.cost.cost_type = 'NONLINEAR_LS'
+            ocp.cost.cost_type_e = 'NONLINEAR_LS'
+
+            # Define weight matrices
+            ocp.cost.W = block_diag(Q_mat, R_mat)  # Weight matrix for stage cost
+            ocp.cost.W_e = block_diag(Q_e)         # Weight matrix for terminal cost
+
+            # Define the cost residual function (y_expr)
+            ocp.model.cost_y_expr = cs.vertcat(
+                x[0:3] - x_ref[0:3],   # Position error
+                x[3:6] - x_ref[3:6],   # Velocity error
+                1 - cs.fabs(x[6:10].T @ x_ref[6:10]),  # Quaternion cost
+                x[10:13] - x_ref[10:13],  # Angular velocity error
+                u - u_ref  # Control input error
+            )
+
+            # Terminal cost 
+            ocp.model.cost_y_expr_e = cs.vertcat(
+                x[0:3] - x_ref[0:3],
+                x[3:6] - x_ref[3:6],
+                1 - cs.fabs(x[6:10].T @ x_ref[6:10]),
+                x[10:13] - x_ref[10:13]
+            )
+
+            # Reference values
+            ocp.cost.yref = np.zeros(ocp.model.cost_y_expr.shape[0])  # Reference for full cost function
+            ocp.cost.yref_e = np.zeros(ocp.model.cost_y_expr_e.shape[0])  # Terminal reference
+
 
         # Initialize parameters
         p_0 = np.concatenate((x0, np.zeros(nu)))  # First step is error 0 since x_ref = x0
         ocp.parameter_values = p_0
 
         # set constraints
-        ocp.constraints.lbu = np.array([-Fmax, -Fmax, -Fmax, -Fmax])
-        ocp.constraints.ubu = np.array([+Fmax, +Fmax, +Fmax, +Fmax])
+        ocp.constraints.lbu = np.array([-1.0] * 4) # np.array([-Fmax, -Fmax, -Fmax, -Fmax])
+        ocp.constraints.ubu = np.array([1.0] * 4) #np.array([+Fmax, +Fmax, +Fmax, +Fmax])
         ocp.constraints.idxbu = np.array([0, 1, 2, 3])
         ocp.constraints.x0 = x0
 
         # set options
-        ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
+        ocp.solver_options.qp_solver = 'FULL_CONDENSING_HPIPM' # 'PARTIAL_CONDENSING_HPIPM'
         # PARTIAL_CONDENSING_HPIPM, FULL_CONDENSING_QPOASES, FULL_CONDENSING_HPIPM,
         # PARTIAL_CONDENSING_QPDUNES, PARTIAL_CONDENSING_OSQP, FULL_CONDENSING_DAQP
         ocp.solver_options.hessian_approx = 'GAUSS_NEWTON' # 'GAUSS_NEWTON', 'EXACT'

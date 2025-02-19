@@ -41,8 +41,10 @@ class SpacecraftDirectAllocationModel():
 
         # constants
         self.mass = 16.8
-        self.inertia = np.diag((0.1454, 0.1366, 0.1594))
-        self.max_thrust = 1.5
+        self.mass_inv = 1.0 / self.mass
+        self.inertia = cs.diag([0.336, 0.336, 0.336]) #np.diag((0.1454, 0.1366, 0.1594))
+        self.inertia_inv = cs.inv(self.inertia)
+        self.max_thrust = 1.4
         self.max_rate = 0.5
         self.torque_arm_length = 0.12
 
@@ -84,6 +86,7 @@ class SpacecraftDirectAllocationModel():
         D_mat[0, 1] = 1
         D_mat[1, 2] = -1
         D_mat[1, 3] = -1
+        D_mat = D_mat * self.max_thrust
 
         # L mat
         L_mat = cs.MX.zeros(1, 4)
@@ -91,7 +94,7 @@ class SpacecraftDirectAllocationModel():
         L_mat[0, 1] = 1
         L_mat[0, 2] = -1
         L_mat[0, 3] = 1
-        L_mat = L_mat * self.torque_arm_length
+        L_mat = L_mat * self.torque_arm_length * self.max_thrust
 
         F_2d = cs.mtimes(D_mat, u)
         tau_1d = cs.mtimes(L_mat, u)
@@ -107,13 +110,18 @@ class SpacecraftDirectAllocationModel():
 
         xdot = cs.vertcat(p_dot, v_dot, q_dot, w_dot)
 
-        a_thrust = v_dot_q(F, q)/self.mass
+        a_thrust = v_dot_q(F, q) * self.mass_inv
 
         # dynamics
+        # f_expl = cs.vertcat(v,
+        #                     a_thrust,
+        #                     1 / 2 * cs.mtimes(skew_symmetric(w), q),
+        #                     np.linalg.inv(self.inertia) @ (tau - cs.cross(w, self.inertia @ w))
+        #                     )
         f_expl = cs.vertcat(v,
                             a_thrust,
                             1 / 2 * cs.mtimes(skew_symmetric(w), q),
-                            np.linalg.inv(self.inertia) @ (tau - cs.cross(w, self.inertia @ w))
+                            cs.mtimes(self.inertia_inv, tau)
                             )
 
         f_impl = xdot - f_expl

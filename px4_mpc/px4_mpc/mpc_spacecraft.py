@@ -80,7 +80,7 @@ class SpacecraftMPC(Node):
 
         # Get mode; rate, wrench, direct_allocation
         self.mode = self.declare_parameter('mode', 'wrench').value
-        self.sitl = True
+        self.sitl = False
 
         # Get namespace
         self.namespace = self.declare_parameter('namespace', '').value
@@ -134,7 +134,7 @@ class SpacecraftMPC(Node):
         self.vehicle_angular_velocity = np.array([0.0, 0.0, 0.0])
         self.vehicle_angular_velocity = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
-        self.setpoint_position = np.array([1.0, 0.0, 0.0])
+        self.setpoint_position = np.array([0.0, 0.0, 0.0])
         self.setpoint_attitude = np.array([1.0, 0.0, 0.0, 0.0])
 
     def set_publishers_subscribers(self, qos_profile_pub, qos_profile_sub):
@@ -299,7 +299,7 @@ class SpacecraftMPC(Node):
         # u3 needs to be divided between 5 and 6
         # u4 needs to be divided between 7 and 8
         # positve component goes for the first, the negative for the second
-        thrust = u_pred[0, :] / self.model.max_thrust  # normalizes w.r.t. max thrust
+        thrust = u_pred[0, :] # / self.model.max_thrust  # normalizes w.r.t. max thrust
         # print("Thrust rates: ", thrust[0:4])
 
         thrust_command = np.zeros(12, dtype=np.float32)

@@ -97,18 +97,18 @@ def generate_launch_description():
             ],
             condition=IfCondition(LaunchConfiguration('setpoint_from_rviz'))
         ),
-        Node(
-            package='px4_mpc',
-            namespace=namespace,
-            executable='test_setpoints',
-            name='test_setpoints',
-            output='screen',
-            emulate_tty=True,
-            parameters=[
-                {'namespace': namespace}
-            ],
-            condition=UnlessCondition(LaunchConfiguration('setpoint_from_rviz'))
-        ),
+        # Node(
+        #     package='px4_mpc',
+        #     namespace=namespace,
+        #     executable='test_setpoints',
+        #     name='test_setpoints',
+        #     output='screen',
+        #     emulate_tty=True,
+        #     parameters=[
+        #         {'namespace': namespace}
+        #     ],
+        #     condition=UnlessCondition(LaunchConfiguration('setpoint_from_rviz'))
+        # ),
         Node(
             package='px4_offboard',
             namespace=namespace,
