@@ -36,6 +36,7 @@ __author__ = "Pedro Roque, Jaeyoung Lim"
 __contact__ = "padr@kth.se, jalim@ethz.ch"
 
 import rclpy
+import time
 import numpy as np
 from rclpy.node import Node
 from rclpy.clock import Clock
@@ -124,7 +125,7 @@ class SpacecraftMPC(Node):
     def set_publishers_subscribers(self, qos_profile_pub, qos_profile_sub):
         self.status_sub = self.create_subscription(
             VehicleStatus,
-            f'{self.namespace_prefix}/fmu/out/vehicle_status',
+            f'{self.namespace_prefix}/fmu/out/vehicle_status_v1',
             self.vehicle_status_callback,
             qos_profile_sub)
 
@@ -281,6 +282,7 @@ class SpacecraftMPC(Node):
 
         # Generate actuator outputs dynamically
         thrust_command = []
+
         for t in thrust:
             thrust_command.extend([max(t, 0.0), max(-t, 0.0)])  # Positive and negative components
 
@@ -396,8 +398,9 @@ class SpacecraftMPC(Node):
             raise ValueError(f'Invalid mode: {self.mode}')
 
         # Solve MPC
+        t0 = time.perf_counter()
         u_pred, x_pred = self.mpc.solve(x0, ref=ref)
-
+        print(f"MPC solve time: {time.perf_counter() - t0:.4f} seconds")
         # Colect data
         idx = 0
         predicted_path_msg = Path()
@@ -436,7 +439,7 @@ class SpacecraftMPC(Node):
         self.setpoint_attitude[1] = msg.pose.orientation.x
         self.setpoint_attitude[2] = msg.pose.orientation.y
         self.setpoint_attitude[3] = msg.pose.orientation.z
-    
+
     def vector2PoseMsg(self, frame_id, position, attitude):
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
