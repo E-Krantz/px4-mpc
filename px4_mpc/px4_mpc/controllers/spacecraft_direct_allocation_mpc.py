@@ -73,9 +73,13 @@ class SpacecraftDirectAllocationMPC():
         ocp.solver_options.N_horizon = N_horizon
 
         # set cost
+        # Q_mat = [5e1, 5e1, 5e1,
+        #          1e1, 1e1, 1e1,
+        #          8e3,
+        #          1e1, 1e1, 1e1]
         Q_mat = [5e1, 5e1, 5e1,
                  1e1, 1e1, 1e1,
-                 8e3,
+                 2e1,
                  1e1, 1e1, 1e1]
         R_mat = [1e1] * 4
 
@@ -95,7 +99,7 @@ class SpacecraftDirectAllocationMPC():
 
         x_error = x[0:3] - x_ref[0:3]
         x_error = cs.vertcat(x_error, x[3:6] - x_ref[3:6])
-        x_error = cs.vertcat(x_error, 1 - (x[6:10].T @ x_ref[6:10])**2)
+        x_error = cs.vertcat(x_error, (x[6:10].T @ x_ref[6:10])**2)
         x_error = cs.vertcat(x_error, x[10:13] - x_ref[10:13])
         u_error = u - u_ref
 
@@ -115,6 +119,11 @@ class SpacecraftDirectAllocationMPC():
         ocp.cost.yref = np.array([0.0] * (nx - 3 + nu))
         ocp.cost.yref_e = np.array([0.0] * (nx - 3))
 
+        # Set quaternion ref 1 to 1.0
+        ocp.cost.yref_0[6] = 1.0
+        ocp.cost.yref[6] = 1.0
+        ocp.cost.yref_e[6] = 1.0
+
         # Initialize parameters
         p_0 = np.concatenate((x0, np.zeros(nu)))  # First step is error 0 since x_ref = x0
         ocp.parameter_values = p_0
@@ -124,15 +133,15 @@ class SpacecraftDirectAllocationMPC():
         ocp.constraints.ubu = np.array([+Fmax, +Fmax, +Fmax, +Fmax])
         ocp.constraints.idxbu = np.array([0, 1, 2, 3])
 
-        # set constraints on X
-        ocp.constraints.lbx = np.array([-5, -5, -5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
-        ocp.constraints.ubx = np.array([+5, +5, +5, +1, +1, +1, +1, +1, +1, +1, +1, +1, +1])
-        ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        # # set constraints on X
+        # ocp.constraints.lbx = np.array([-5, -5, -5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+        # ocp.constraints.ubx = np.array([+5, +5, +5, +1, +1, +1, +1, +1, +1, +1, +1, +1, +1])
+        # ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 
-        # set constraints on X at the end of the horizon
-        ocp.constraints.lbx_e = np.array([-5, -5, -5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
-        ocp.constraints.ubx_e = np.array([+5, +5, +5, +1, +1, +1, +1, +1, +1, +1, +1, +1, +1])
-        ocp.constraints.idxbx_e = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        # # set constraints on X at the end of the horizon
+        # ocp.constraints.lbx_e = np.array([-5, -5, -5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+        # ocp.constraints.ubx_e = np.array([+5, +5, +5, +1, +1, +1, +1, +1, +1, +1, +1, +1, +1])
+        # ocp.constraints.idxbx_e = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 
         # set initial state
         ocp.constraints.x0 = x0
