@@ -58,6 +58,9 @@ from px4_msgs.msg import VehicleThrustSetpoint
 
 from mpc_msgs.srv import SetPose
 
+DATA_VALIDITY_STREAM = 0.5 # seconds, threshold for (pos,att,vel) messages
+DATA_VALIDITY_STATUS = 2.0 # seconds, threshold for status message
+
 class SpacecraftMPC(Node):
 
     def __init__(self):
@@ -121,6 +124,12 @@ class SpacecraftMPC(Node):
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
         self.setpoint_position = np.array([1.0, 0.0, 0.0])
         self.setpoint_attitude = np.array([1.0, 0.0, 0.0, 0.0])
+
+        # Set initial timestamps
+        self.vehicle_attitude_timestamp = -np.inf
+        self.vehicle_local_position_timestamp = -np.inf
+        self.vehicle_angular_velocity_timestamp = -np.inf
+        self.vehicle_status_timestamp = -np.inf
 
     def set_publishers_subscribers(self, qos_profile_pub, qos_profile_sub):
         self.status_sub = self.create_subscription(
@@ -198,12 +207,14 @@ class SpacecraftMPC(Node):
     def vehicle_attitude_callback(self, msg):
         # NED-> ENU transformation
         # Receives quaternion in NED frame as (qw, qx, qy, qz)
+        self.vehicle_attitude_timestamp = Clock().now().nanoseconds / 1e9
         q_enu = 1/np.sqrt(2) * np.array([msg.q[0] + msg.q[3], msg.q[1] + msg.q[2], msg.q[1] - msg.q[2], msg.q[0] - msg.q[3]])
         q_enu /= np.linalg.norm(q_enu)
         self.vehicle_attitude = q_enu.astype(float)
 
     def vehicle_local_position_callback(self, msg):
         # NED-> ENU transformation
+        self.vehicle_local_position_timestamp = Clock().now().nanoseconds / 1e9
         self.vehicle_local_position[0] = msg.y
         self.vehicle_local_position[1] = msg.x
         self.vehicle_local_position[2] = -msg.z
@@ -213,6 +224,7 @@ class SpacecraftMPC(Node):
 
     def vehicle_angular_velocity_callback(self, msg):
         # NED-> ENU transformation
+        self.vehicle_angular_velocity_timestamp = Clock().now().nanoseconds / 1e9
         self.vehicle_angular_velocity[0] = msg.xyz[0]
         self.vehicle_angular_velocity[1] = -msg.xyz[1]
         self.vehicle_angular_velocity[2] = -msg.xyz[2]
@@ -220,6 +232,7 @@ class SpacecraftMPC(Node):
     def vehicle_status_callback(self, msg):
         # print("NAV_STATUS: ", msg.nav_state)
         # print("  - offboard status: ", VehicleStatus.NAVIGATION_STATE_OFFBOARD)
+        self.vehicle_status_timestamp = Clock().now().nanoseconds / 1e9
         self.nav_state = msg.nav_state
 
     def publish_reference(self, pub, reference):
@@ -314,11 +327,31 @@ class SpacecraftMPC(Node):
         self.odom_pub.publish(msg)
         return
 
+    def check_data_validity(self):
+        current_time = Clock().now().nanoseconds / 1e9
+
+        # Check if the data is valid based on the timestamps
+        if (current_time - self.vehicle_attitude_timestamp > DATA_VALIDITY_STREAM or
+            current_time - self.vehicle_local_position_timestamp > DATA_VALIDITY_STREAM or
+            current_time - self.vehicle_angular_velocity_timestamp > DATA_VALIDITY_STREAM):
+            self.get_logger().warn("Vehicle attitude, position, or angular velocity data is too old. Skipping offboard control...")
+            return False
+
+        if (current_time - self.vehicle_status_timestamp > DATA_VALIDITY_STATUS):
+            self.get_logger().warn("Vehicle status data is too old. Skipping offboard control...")
+            return False
+
+        return True
+
     def cmdloop_callback(self):
 
         # Publish odometry for SITL
         if self.sitl:
             self.publish_sitl_odometry()
+
+        # Check data validity
+        if not self.check_data_validity():
+            return
 
         # Publish offboard control modes
         offboard_msg = OffboardControlMode()
@@ -398,9 +431,8 @@ class SpacecraftMPC(Node):
             raise ValueError(f'Invalid mode: {self.mode}')
 
         # Solve MPC
-        t0 = time.perf_counter()
         u_pred, x_pred = self.mpc.solve(x0, ref=ref)
-        print(f"MPC solve time: {time.perf_counter() - t0:.4f} seconds")
+
         # Colect data
         idx = 0
         predicted_path_msg = Path()
