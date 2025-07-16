@@ -132,7 +132,7 @@ class SpacecraftMPC(Node):
         # - depending on PX4 version, one or the other will be used, but not both
         self.status_sub_v1 = self.create_subscription(
             VehicleStatus,
-            f'{self.namespace_prefix}/fmu/out/vehicle_status_v1',
+            '/fmu/out/vehicle_status_v1',
             self.vehicle_status_callback,
             qos_profile_sub)
         self.status_sub = self.create_subscription(
@@ -298,15 +298,11 @@ class SpacecraftMPC(Node):
 
         # Generate actuator outputs dynamically
         thrust_command = []
-
         for t in thrust:
-            thrust_command.extend([max(t, 0.0), max(-t, 0.0)])  # Positive and negative components
+            thrust_command.extend([max(t, 0.0), max(-t, 0.0)])
+        thrust_command = np.clip(np.array(thrust_command, dtype=np.float32), 0.0, 1.0)
 
-        # Ensure the output array has exactly 12 elements
-        thrust_command = np.array(thrust_command[:12], dtype=np.float32)
-        thrust_command = np.clip(thrust_command, 0.0, 1.0)  # Clip values between 0 and 1
-
-        actuator_outputs_msg.control = thrust_command
+        actuator_outputs_msg.control[:len(thrust_command)] = thrust_command
         self.publisher_direct_actuator.publish(actuator_outputs_msg)
 
     def publish_sitl_odometry(self):
