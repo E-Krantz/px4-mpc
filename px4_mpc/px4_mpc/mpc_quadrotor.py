@@ -82,27 +82,27 @@ class QuadrotorMPC(Node):
 
         self.status_sub = self.create_subscription(
             VehicleStatus,
-            '/fmu/out/vehicle_status',
+            'fmu/out/vehicle_status',
             self.vehicle_status_callback,
             qos_profile)
 
         self.attitude_sub = self.create_subscription(
             VehicleAttitude,
-            '/fmu/out/vehicle_attitude',
+            'fmu/out/vehicle_attitude',
             self.vehicle_attitude_callback,
             qos_profile)
         self.local_position_sub = self.create_subscription(
             VehicleLocalPosition,
-            '/fmu/out/vehicle_local_position',
+            'fmu/out/vehicle_local_position',
             self.vehicle_local_position_callback,
             qos_profile)
 
-        self.set_pose_srv = self.create_service(SetPose, '/set_pose', self.add_set_pos_callback)
+        self.set_pose_srv = self.create_service(SetPose, 'set_pose', self.add_set_pos_callback)
 
-        self.publisher_offboard_mode = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
-        self.publisher_rates_setpoint = self.create_publisher(VehicleRatesSetpoint, '/fmu/in/vehicle_rates_setpoint', qos_profile)
-        self.predicted_path_pub = self.create_publisher(Path, '/px4_mpc/predicted_path', 10)
-        self.reference_pub = self.create_publisher(Marker, "/px4_mpc/reference", 10
+        self.publisher_offboard_mode = self.create_publisher(OffboardControlMode, 'fmu/in/offboard_control_mode', qos_profile)
+        self.publisher_rates_setpoint = self.create_publisher(VehicleRatesSetpoint, 'fmu/in/vehicle_rates_setpoint', qos_profile)
+        self.predicted_path_pub = self.create_publisher(Path, 'px4_mpc/predicted_path', 10)
+        self.reference_pub = self.create_publisher(Marker, "px4_mpc/reference", 10
         )
 
         timer_period = 0.02  # seconds

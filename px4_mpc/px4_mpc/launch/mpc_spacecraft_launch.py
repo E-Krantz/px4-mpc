@@ -81,7 +81,6 @@ def generate_launch_description():
             emulate_tty=True,
             parameters=[
                 {'mode': mode},
-                {'namespace': namespace},
                 {'setpoint_from_rviz': setpoint_from_rviz}
             ]
         ),
@@ -92,9 +91,6 @@ def generate_launch_description():
             name='rviz_pos_marker',
             output='screen',
             emulate_tty=True,
-            parameters=[
-                {'namespace': namespace}
-            ],
             condition=IfCondition(LaunchConfiguration('setpoint_from_rviz'))
         ),
         Node(
@@ -104,9 +100,6 @@ def generate_launch_description():
             name='test_setpoints',
             output='screen',
             emulate_tty=True,
-            parameters=[
-                {'namespace': namespace}
-            ],
             condition=UnlessCondition(LaunchConfiguration('setpoint_from_rviz'))
         ),
         Node(
@@ -114,9 +107,6 @@ def generate_launch_description():
             namespace=namespace,
             executable='visualizer',
             name='visualizer',
-            parameters=[
-                {'namespace': namespace}
-            ],
             condition=IfCondition(LaunchConfiguration('setpoint_from_rviz'))
         ),
         Node(
