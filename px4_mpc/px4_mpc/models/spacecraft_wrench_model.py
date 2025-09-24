@@ -34,6 +34,7 @@
 from acados_template import AcadosModel
 import casadi as ca
 import numpy as np
+import px4_mpc.utils.rotations as R
 
 class SpacecraftWrenchModel():
     def __init__(self):
@@ -42,8 +43,8 @@ class SpacecraftWrenchModel():
         # constants
         self.mass = 17.8
         self.inertia = np.diag([0.315]*3)
-        self.max_thrust = 2 * 1.5
-        self.max_torque = 4 * 0.12 * 1.5
+        self.max_thrust = 2 * 1.5 * 2/3
+        self.max_torque = 4 * 0.12 * 1.5 * 1/3
 
         # set linearized symbolic matrices
         # functions: 12x12, 12x6 wrt error state

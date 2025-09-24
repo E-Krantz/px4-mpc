@@ -278,9 +278,9 @@ class SpacecraftMPC(Node):
         msg.ns = "arrow"
         msg.id = 1
         msg.type = Marker.SPHERE
-        msg.scale.x = 0.5
-        msg.scale.y = 0.5
-        msg.scale.z = 0.5
+        msg.scale.x = 0.3
+        msg.scale.y = 0.3
+        msg.scale.z = 0.3
         msg.color.r = 1.0
         msg.color.g = 0.0
         msg.color.b = 0.0
@@ -319,9 +319,8 @@ class SpacecraftMPC(Node):
         # The PX4 uses normalized wrench input. Scaling with respect to the maximum force and torque.
         F_scaling = 1/(2 * 1.5)
         T_scaling = 1/(4 * 0.12 * 1.5)
-        u_pred[0, 0] *= F_scaling
-        u_pred[0, 1] *= F_scaling
-        u_pred[0, 2] *= T_scaling
+        u_pred[0, :3] *= F_scaling
+        u_pred[0, 3:6] *= T_scaling
 
         thrust_outputs_msg = VehicleThrustSetpoint()
         thrust_outputs_msg.timestamp = int(Clock().now().nanoseconds / 1000)
@@ -329,12 +328,9 @@ class SpacecraftMPC(Node):
         torque_outputs_msg = VehicleTorqueSetpoint()
         torque_outputs_msg.timestamp = int(Clock().now().nanoseconds / 1000)
 
-        eps_x = 0.0
-        eps_y = 0.0
-        eps_tau = 0.00
-
-        thrust_outputs_msg.xyz = [u_pred[0, 0] - eps_x, -u_pred[0, 1] - eps_y, -0.0]
-        torque_outputs_msg.xyz = [0.0, 0.0, -u_pred[0, 5] - eps_tau]
+        # FLU -> FRD transformation
+        thrust_outputs_msg.xyz = [u_pred[0, 0], -u_pred[0, 1], -u_pred[0, 2]]
+        torque_outputs_msg.xyz = [u_pred[0, 3], -u_pred[0, 4], -u_pred[0, 5]]
 
         self.publisher_thrust_setpoint.publish(thrust_outputs_msg)
         self.publisher_torque_setpoint.publish(torque_outputs_msg)
