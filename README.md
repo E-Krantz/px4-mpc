@@ -121,6 +121,9 @@ You can either use QGroundControl (QGC) to visualize the vehicle state and send 
 4. Make sure that auto-center throttle is disabled.
 5. Click "Exit Application Settings" on the top left corner to return to the Fly-view screen.
 
+**Important:** Before arming the vehicle, make sure that the throttle (left vertical joystick) is at the lowest position.
+
+
 **Warning: do these at your own risk. We recommend using the QGC interface to ensure hardware and software homogeneity.** If you prefer to run the simulation without QGC, you can disable the RC check and QGC connection requirement by adding the following parameters to the PX4 SITL command:
 ```bash
 pxh> param set COM_RC_IN_MODE 1
