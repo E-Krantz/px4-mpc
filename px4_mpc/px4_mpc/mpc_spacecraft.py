@@ -410,11 +410,11 @@ class SpacecraftMPC(Node):
         if (current_time - self.vehicle_attitude_timestamp > DATA_VALIDITY_STREAM or
             current_time - self.vehicle_local_position_timestamp > DATA_VALIDITY_STREAM or
             current_time - self.vehicle_angular_velocity_timestamp > DATA_VALIDITY_STREAM):
-            self.get_logger().warn("Vehicle attitude, position, or angular velocity data is too old. Skipping offboard control...")
+            self.get_logger().warn("Vehicle attitude, position, or angular velocity data is too old. Skipping offboard control...", throttle_duration_sec=1.0)
             return False
 
         if (current_time - self.vehicle_status_timestamp > DATA_VALIDITY_STATUS):
-            self.get_logger().warn("Vehicle status data is too old. Skipping offboard control...")
+            self.get_logger().warn("Vehicle status data is too old. Skipping offboard control...", throttle_duration_sec=1.0)
             return False
 
         return True
