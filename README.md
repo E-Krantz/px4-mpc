@@ -96,7 +96,7 @@ At this point, the vehicle should start following the desired setpoints.
 
 #### Notes:
 The `mpc_spacecraft_launch.py` file includes optional arguments:
-- **mode**: Control mode (wrench by default). Options: wrench, rate, direct_allocation.  
+- **mode**: Control mode (wrench by default). Options: wrench, rate, direct_allocation and _offset free_. For offset free MPC, please install the package [OpenMPC](https://github.com/mikaelj-kth-se/OpenMPC).  
 - **namespace**: Spacecraft namespace ('' by default).  
 - **setpoint_from_rviz**: Use RViz for setpoints (True by default).
 
