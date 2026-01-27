@@ -129,4 +129,4 @@ pxh> param set COM_ARM_WO_GPS 1
 pxh> param set CBRK_USB_CHK 197848
 pxh> param set COM_ARMABLE 1
 ```
-Then, restart the PX4 SITL to apply the changes. After rebooting, you should be able to arm and swithc vehicle 
+Then, restart the PX4 SITL to apply the changes. After rebooting, you should be able to arm and switch vehicle modes.
