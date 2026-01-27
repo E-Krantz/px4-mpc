@@ -48,7 +48,7 @@ import tempfile
 def generate_launch_description():
     mode_arg = DeclareLaunchArgument(
         'mode',
-        default_value='direct_allocation',
+        default_value='wrench',
         description='Mode of the controller (rate, wrench, direct_allocation)'
     )
 
@@ -121,7 +121,7 @@ def patch_rviz_config(original_config_path, namespace):
 
     # Replace placeholder with actual namespace
     content = content.replace('__NS__', f'/{namespace}' if namespace else '')
-    
+
     # Write to temporary file
     tmp_rviz_config = tempfile.NamedTemporaryFile(delete=False, suffix='.rviz')
     tmp_rviz_config.write(content.encode('utf-8'))

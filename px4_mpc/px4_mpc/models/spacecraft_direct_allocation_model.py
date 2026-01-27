@@ -48,9 +48,9 @@ class SpacecraftDirectAllocationModel():
     def get_acados_model(self) -> AcadosModel:
         def skew_symmetric(v):
             return cs.vertcat(cs.horzcat(0, -v[0], -v[1], -v[2]),
-                cs.horzcat(v[0], 0, v[2], -v[1]),
-                cs.horzcat(v[1], -v[2], 0, v[0]),
-                cs.horzcat(v[2], v[1], -v[0], 0))
+                              cs.horzcat(v[0], 0, v[2], -v[1]),
+                              cs.horzcat(v[1], -v[2], 0, v[0]),
+                              cs.horzcat(v[2], v[1], -v[0], 0))
 
         def q_to_rot_mat(q):
             qw, qx, qy, qz = q[0], q[1], q[2], q[3]

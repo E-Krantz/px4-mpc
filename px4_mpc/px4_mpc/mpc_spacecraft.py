@@ -43,7 +43,7 @@ from rclpy.clock import Clock
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
 from nav_msgs.msg import Path, Odometry
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Vector3Stamped
 from visualization_msgs.msg import Marker
 
 from px4_msgs.msg import OffboardControlMode
@@ -68,7 +68,7 @@ class SpacecraftMPC(Node):
 
         # Get mode; rate, wrench, direct_allocation
         self.mode = self.declare_parameter('mode', 'wrench').value
-        self.sitl = True
+        self.sitl = self.declare_parameter('sitl', False).value
 
         # Get setpoint from rviz (true/false)
         self.setpoint_from_rviz = self.declare_parameter('setpoint_from_rviz', False).value
@@ -107,6 +107,13 @@ class SpacecraftMPC(Node):
             from px4_mpc.controllers.spacecraft_wrench_mpc import SpacecraftWrenchMPC
             self.model = SpacecraftWrenchModel()
             self.mpc = SpacecraftWrenchMPC(self.model)
+        elif self.mode == 'offset_free_wrench':
+            from px4_mpc.controllers.spacecraft_offset_free_wrench_mpc import SpacecraftOffsetFreeWrenchMPC
+            self.mpc = SpacecraftOffsetFreeWrenchMPC()
+        elif self.mode == 'lqr_wrench':
+            from px4_mpc.models.spacecraft_wrench_model import SpacecraftWrenchModel
+            from px4_mpc.controllers.spacecraft_wrench_lqr import SpacecraftWrenchLQR
+            self.mpc = SpacecraftWrenchLQR(model=SpacecraftWrenchModel())
         elif self.mode == 'direct_allocation':
             from px4_mpc.models.spacecraft_direct_allocation_model import SpacecraftDirectAllocationModel
             from px4_mpc.controllers.spacecraft_direct_allocation_mpc import SpacecraftDirectAllocationMPC
@@ -156,6 +163,11 @@ class SpacecraftMPC(Node):
             'fmu/out/vehicle_local_position',
             self.vehicle_local_position_callback,
             qos_profile_sub)
+        self.local_position_sub = self.create_subscription(
+            VehicleLocalPosition,
+            'fmu/out/vehicle_local_position_v1',
+            self.vehicle_local_position_callback,
+            qos_profile_sub)
 
         if self.setpoint_from_rviz:
             self.set_pose_srv = self.create_service(
@@ -199,12 +211,32 @@ class SpacecraftMPC(Node):
             Marker,
             'px4_mpc/reference',
             10)
+        if self.mode == 'offset_free_wrench':
+            self.disturbance_rotation_pub = self.create_publisher(
+                Vector3Stamped,
+                'px4_mpc/translation_d_hat',
+                qos_profile_pub)
+
+            self.disturbance_translation_pub = self.create_publisher(
+                Vector3Stamped,
+                'px4_mpc/attitude_d_hat',
+                qos_profile_pub)
 
         if self.sitl:
+            qos_profile_pub_sitl = QoSProfile(
+                reliability=QoSReliabilityPolicy.RELIABLE,
+                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=0
+            )
             self.odom_pub = self.create_publisher(
                 Odometry,
-                'odom',
-                qos_profile_pub)
+                f'{self.namespace_prefix}/odom',
+                qos_profile_pub_sitl)
+            self.sitl_pose_pub = self.create_publisher(
+                PoseStamped,
+                f'{self.namespace_prefix}/pose',
+                qos_profile_pub_sitl)
         return
 
     def vehicle_attitude_callback(self, msg):
@@ -297,8 +329,12 @@ class SpacecraftMPC(Node):
         torque_outputs_msg = VehicleTorqueSetpoint()
         torque_outputs_msg.timestamp = int(Clock().now().nanoseconds / 1000)
 
-        thrust_outputs_msg.xyz = [u_pred[0, 0], -u_pred[0, 1], -0.0]
-        torque_outputs_msg.xyz = [0.0, -0.0, -u_pred[0, 2]]
+        eps_x = 0.0
+        eps_y = 0.0
+        eps_tau = 0.00
+
+        thrust_outputs_msg.xyz = [u_pred[0, 0] - eps_x, -u_pred[0, 1] - eps_y, -0.0]
+        torque_outputs_msg.xyz = [0.0, 0.0, -u_pred[0, 5] - eps_tau]
 
         self.publisher_thrust_setpoint.publish(thrust_outputs_msg)
         self.publisher_torque_setpoint.publish(torque_outputs_msg)
@@ -319,9 +355,24 @@ class SpacecraftMPC(Node):
         actuator_outputs_msg.control[:len(thrust_command)] = thrust_command
         self.publisher_direct_actuator.publish(actuator_outputs_msg)
 
+    def publish_disturbance_estimate(self, d_hat):
+        disturbance_msg = Vector3Stamped()
+        disturbance_msg.header.stamp = Clock().now().to_msg()
+        disturbance_msg.vector.x = d_hat[0]
+        disturbance_msg.vector.y = d_hat[1]
+        disturbance_msg.vector.z = d_hat[2]
+        self.disturbance_translation_pub.publish(disturbance_msg)
+
+        disturbance_msg = Vector3Stamped()
+        disturbance_msg.header.stamp = Clock().now().to_msg()
+        disturbance_msg.vector.x = d_hat[3]
+        disturbance_msg.vector.y = d_hat[4]
+        disturbance_msg.vector.z = d_hat[5]
+        self.disturbance_rotation_pub.publish(disturbance_msg)
+
     def publish_sitl_odometry(self):
         msg = Odometry()
-        msg.header.frame_id = "map"
+        msg.header.frame_id = "mocap"
         msg.child_frame_id = "base_link"
         msg.header.stamp = Clock().now().to_msg()
         msg.pose.pose.position.x = self.vehicle_local_position[0]
@@ -338,6 +389,18 @@ class SpacecraftMPC(Node):
         msg.twist.twist.angular.y = self.vehicle_angular_velocity[1]
         msg.twist.twist.angular.z = self.vehicle_angular_velocity[2]
         self.odom_pub.publish(msg)
+
+        pose_msg = PoseStamped()
+        pose_msg.header.frame_id = "mocap"
+        pose_msg.header.stamp = Clock().now().to_msg()
+        pose_msg.pose.position.x = self.vehicle_local_position[0]
+        pose_msg.pose.position.y = self.vehicle_local_position[1]
+        pose_msg.pose.position.z = self.vehicle_local_position[2]
+        pose_msg.pose.orientation.w = self.vehicle_attitude[0]
+        pose_msg.pose.orientation.x = self.vehicle_attitude[1]
+        pose_msg.pose.orientation.y = self.vehicle_attitude[2]
+        pose_msg.pose.orientation.z = self.vehicle_attitude[3]
+        self.sitl_pose_pub.publish(pose_msg)
         return
 
     def check_data_validity(self):
@@ -379,7 +442,7 @@ class SpacecraftMPC(Node):
             offboard_msg.body_rate = True
         elif self.mode == 'direct_allocation':
             offboard_msg.direct_actuator = True
-        elif self.mode == 'wrench':
+        elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench':
             offboard_msg.thrust_and_torque = True
         self.publisher_offboard_mode.publish(offboard_msg)
 
@@ -400,7 +463,7 @@ class SpacecraftMPC(Node):
                                   self.setpoint_attitude,       # attitude
                                   np.zeros(6)), axis=0)         # inputs reference (F, w)
             ref = np.repeat(ref.reshape((-1, 1)), self.mpc.N + 1, axis=1)
-        elif self.mode == 'wrench':
+        elif self.mode == 'wrench' or self.mode == 'offset_free_wrench':
             x0 = np.array([self.vehicle_local_position[0],
                            self.vehicle_local_position[1],
                            self.vehicle_local_position[2],
@@ -418,8 +481,26 @@ class SpacecraftMPC(Node):
                                   np.zeros(3),                  # velocity
                                   self.setpoint_attitude,       # attitude
                                   np.zeros(3),                  # angular velocity
-                                  np.zeros(3)), axis=0)         # inputs reference (F, torque)
+                                  np.zeros(6)), axis=0)         # inputs reference (F, torque)
             ref = np.repeat(ref.reshape((-1, 1)), self.mpc.N + 1, axis=1)
+        elif self.mode == 'lqr_wrench':
+            x0 = np.array([self.vehicle_local_position[0],
+                           self.vehicle_local_position[1],
+                           self.vehicle_local_position[2],
+                           self.vehicle_local_velocity[0],
+                           self.vehicle_local_velocity[1],
+                           self.vehicle_local_velocity[2],
+                           self.vehicle_attitude[0],
+                           self.vehicle_attitude[1],
+                           self.vehicle_attitude[2],
+                           self.vehicle_attitude[3],
+                           self.vehicle_angular_velocity[0],
+                           self.vehicle_angular_velocity[1],
+                           self.vehicle_angular_velocity[2]]).reshape(13, 1)
+            ref = np.concatenate((self.setpoint_position,       # position
+                                  np.zeros(3),                  # velocity
+                                  self.setpoint_attitude[0:],       # attitude
+                                  np.zeros(3)), axis=0)         # angular velocity
         elif self.mode == 'direct_allocation':
             x0 = np.array([self.vehicle_local_position[0],
                            self.vehicle_local_position[1],
@@ -446,6 +527,10 @@ class SpacecraftMPC(Node):
         # Solve MPC
         u_pred, x_pred = self.mpc.solve(x0, ref=ref)
 
+        if self.mode == 'offset_free_wrench':
+            # Publish disturbance
+            self.publish_disturbance_estimate(self.mpc.get_disturbance_estimate())
+
         # Colect data
         idx = 0
         predicted_path_msg = Path()
@@ -463,7 +548,7 @@ class SpacecraftMPC(Node):
                 self.publish_rate_setpoint(u_pred)
             elif self.mode == 'direct_allocation' or self.mode == 'direct_allocation_trajectory':
                 self.publish_direct_actuator_setpoint(u_pred)
-            elif self.mode == 'wrench':
+            elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench':
                 self.publish_wrench_setpoint(u_pred)
 
     def add_set_pos_callback(self, request, response):

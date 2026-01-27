@@ -11,26 +11,39 @@ class SetpointPublisher(Node):
         super().__init__('setpoint_publisher')
 
         self.namespace = self.declare_parameter('namespace', '').value
+        self.sitl = self.declare_parameter('hardware', False).value
         self.namespace_prefix = f'/{self.namespace}' if self.namespace else ''
 
         self.publisher_ = self.create_publisher(PoseStamped, f'{self.namespace_prefix}/px4_mpc/setpoint_pose', 10)
         self.timer_period = 0.01  # seconds
         time.sleep(5) # Give time for all inits...
         self.counter = 0
-        self.setpoints = [
-            (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            (1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            (1.0, 0.0, 0.0, 0.0, 0.0, 0.383, 0.924),
-            (1.0, 1.0, 0.0, 0.0, 0.0, 0.707, 0.707),
-            (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-        ]
+
+        # Get test setpoints data - move to param files later
+        if self.sitl:
+            self.setpoints = [
+                (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+                (1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+                (1.0, 0.0, 0.0, 0.0, 0.0, 0.383, 0.924),
+                (1.0, 1.0, 0.0, 0.0, 0.0, 0.707, 0.707),
+                (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            ]
+        else:
+            self.setpoints = [
+                (0.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
+                (1.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
+                (1.4, -0.8, 0.0, 0.0, 0.0, 0.383, 0.924),
+                (1.4, 0.2, 0.0, 0.0, 0.0, 0.707, 0.707),
+                (0.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
+            ]
+
         self.index = -1
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
 
     def timer_callback(self):
         x, y, z, qx, qy, qz, qw = self.setpoints[self.index]
         pose = PoseStamped()
-        pose.header.frame_id = 'map'
+        pose.header.frame_id = 'mocap'
         pose.header.stamp = Clock().now().to_msg()
         pose.pose.position.x = x
         pose.pose.position.y = y
