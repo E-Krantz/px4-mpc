@@ -71,10 +71,16 @@ commander mode offboard
 ```
 
 ### Spacecraft Example
-First, make sure that you have followed the instructions in the [ATMOS guide](https://atmos.discower.io/pages/Simulation/). Then, on your PX4-Autopilot directory, run the following command to start the PX4 SITL with Gazebo:
+First, make sure that you have followed the instructions in the [ATMOS guide](https://atmos.discower.io/pages/Simulation/). ATMOS MPC node also requires vehicle angular velocity data. Please modify the file `PX4-Autopilot/src/modules/uxrce_dds_client/dds_topics-yaml` and uncomment lines 56-57 to enable:
+```yaml
+  - topic: /fmu/out/vehicle_angular_velocity
+    type: px4_msgs::msg::VehicleAngularVelocity
+```
+
+Then, on your PX4-Autopilot directory, run the following command to start the PX4 SITL with Gazebo:
 ```bash
 cd ~/PX4-Autopilot
-make px4_sitl gz_atmos
+make px4_sitl_spacecraft gz_atmos
 ```
 
 On another terminal, run
@@ -108,7 +114,7 @@ ros2 launch px4_mpc mpc_spacecraft_launch.py mode:=wrench setpoint_from_rviz:=Fa
 **Example with namespace:**
 For this example to work, make sure you have run the PX4 SITL with the same namespace. Here goes an example
 ```bash
-PX4_UXRCE_DDS_NS=pop make px4_sitl gz_atmos
+PX4_UXRCE_DDS_NS=pop make px4_sitl_spacecraft gz_atmos
 ```
 
 ## QGC Setup or Headless (no-QGC) Setup
