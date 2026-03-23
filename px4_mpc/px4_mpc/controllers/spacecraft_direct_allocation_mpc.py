@@ -40,8 +40,8 @@ from px4_mpc.utils.rotations import quat_mult_cs
 class SpacecraftDirectAllocationMPC():
     def __init__(self, model):
         self.model = model
-        self.Tf = 10.0
-        self.N = 49
+        self.Tf = 5.0
+        self.N = 29
 
         self.x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
@@ -76,7 +76,7 @@ class SpacecraftDirectAllocationMPC():
         # set cost
         Q_mat = [1e0, 1e0, 1e0,
                  2e0, 2e0, 2e0,
-                 1e2, 5e1, 5e1, 5e1,
+                 5e1, 5e1, 5e1,
                  5e0, 5e0, 5e0]
         R_mat = [5e-1] * 4
 
@@ -94,15 +94,19 @@ class SpacecraftDirectAllocationMPC():
         x = ocp.model.x
         u = ocp.model.u
 
-        q = x_ref[6:10]
-        q_ref = x[6:10]
-        q = q / cs.norm_2(q)
-        q_error = quat_mult_cs(q, cs.vertcat(q_ref[0], -q_ref[1], -q_ref[2], -q_ref[3]))
-        q_error = q_error * cs.sign(q_error[0])
+        q = x[6:10]
+        q = q / (cs.norm_2(q) + 1e-8)
+        q_ref = x_ref[6:10]
+        q_ref = cs.sign(cs.dot(q, q_ref)) * q_ref # Ensure q_ref has the same sign as q
+        q_error_v = cs.vertcat(
+            q_ref[0]*q[1] - q_ref[1]*q[0] - q_ref[2]*q[3] + q_ref[3]*q[2],
+            q_ref[0]*q[2] + q_ref[1]*q[3] - q_ref[2]*q[0] - q_ref[3]*q[1],
+            q_ref[0]*q[3] - q_ref[1]*q[2] + q_ref[2]*q[1] - q_ref[3]*q[0]
+        )
 
         x_error = x[0:3] - x_ref[0:3]
         x_error = cs.vertcat(x_error, x[3:6] - x_ref[3:6])
-        x_error = cs.vertcat(x_error, q_error)
+        x_error = cs.vertcat(x_error, q_error_v)
         x_error = cs.vertcat(x_error, x[10:13] - x_ref[10:13])
         u_error = u - u_ref
 
@@ -118,11 +122,8 @@ class SpacecraftDirectAllocationMPC():
         ocp.model.cost_y_expr_e = x_error
 
         ocp.cost.yref_0 = np.zeros(ocp.model.cost_y_expr_0.shape[0])
-        ocp.cost.yref_0[6] = 1
         ocp.cost.yref = np.zeros(ocp.model.cost_y_expr.shape[0])
-        ocp.cost.yref[6] = 1
         ocp.cost.yref_e = np.zeros(ocp.model.cost_y_expr_e.shape[0])
-        ocp.cost.yref_e[6] = 1
 
         # Initialize parameters
         p_0 = np.concatenate((x0, np.zeros(nu)))  # First step is error 0 since x_ref = x0

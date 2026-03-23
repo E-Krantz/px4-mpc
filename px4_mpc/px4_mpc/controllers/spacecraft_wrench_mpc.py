@@ -40,8 +40,8 @@ from px4_mpc.utils.rotations import quat_mult_cs
 class SpacecraftWrenchMPC():
     def __init__(self, model):
         self.model = model
-        self.Tf = 10.0
-        self.N = 49
+        self.Tf = 5.0
+        self.N = 29
 
         self.x0 = np.array([0.01, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
@@ -75,11 +75,11 @@ class SpacecraftWrenchMPC():
 
         # set cost
         Q_mat = [1e0, 1e0, 1e0,
-                 2e0, 2e0, 2e0,
-                 1e2, 5e1, 5e1, 5e1,
-                 5e0, 5e0, 5e0]
-        R_mat = [5e-1, 5e-1, 5e-1,
-                 3e1, 3e1, 3e1]
+                 1e1, 1e1, 1e1,
+                 5e1, 5e1, 5e1,
+                 1e1, 1e1, 1e1]
+        R_mat = [1e-1, 1e-1, 1e-1,
+                 1e1, 1e1, 1e1]
 
         ocp.cost.W_0 = np.diag(Q_mat + R_mat)
         ocp.cost.W = np.diag(Q_mat + R_mat)
@@ -95,15 +95,19 @@ class SpacecraftWrenchMPC():
         x = ocp.model.x
         u = ocp.model.u
 
-        q = x_ref[6:10]
-        q_ref = x[6:10]
-        q = q / cs.norm_2(q)
-        q_error = quat_mult_cs(q, cs.vertcat(q_ref[0], -q_ref[1], -q_ref[2], -q_ref[3]))
-        q_error = q_error * cs.sign(q_error[0])
+        q = x[6:10]
+        q = q / (cs.norm_2(q) + 1e-8)
+        q_ref = x_ref[6:10]
+        q_ref = cs.sign(cs.dot(q, q_ref)) * q_ref # Ensure q_ref has the same sign as q
+        q_error_v = cs.vertcat(
+            q_ref[0]*q[1] - q_ref[1]*q[0] - q_ref[2]*q[3] + q_ref[3]*q[2],
+            q_ref[0]*q[2] + q_ref[1]*q[3] - q_ref[2]*q[0] - q_ref[3]*q[1],
+            q_ref[0]*q[3] - q_ref[1]*q[2] + q_ref[2]*q[1] - q_ref[3]*q[0]
+        )
 
         x_error = x[0:3] - x_ref[0:3]
         x_error = cs.vertcat(x_error, x[3:6] - x_ref[3:6])
-        x_error = cs.vertcat(x_error, q_error)
+        x_error = cs.vertcat(x_error, q_error_v)
         x_error = cs.vertcat(x_error, x[10:13] - x_ref[10:13])
         u_error = u - u_ref
 
@@ -119,29 +123,36 @@ class SpacecraftWrenchMPC():
         ocp.model.cost_y_expr_e = x_error
 
         ocp.cost.yref_0 = np.zeros(ocp.model.cost_y_expr_0.shape[0])
-        ocp.cost.yref_0[6] = 1
         ocp.cost.yref = np.zeros(ocp.model.cost_y_expr.shape[0])
-        ocp.cost.yref[6] = 1
         ocp.cost.yref_e = np.zeros(ocp.model.cost_y_expr_e.shape[0])
-        ocp.cost.yref_e[6] = 1
 
         # Initialize parameters
         p_0 = np.concatenate((x0, np.zeros(nu)))  # First step is error 0 since x_ref = x0
         ocp.parameter_values = p_0
 
         # set constraints on U
-        ocp.constraints.lbu = np.array([-Fmax, -Fmax, 0, 0, 0, -Tmax])
-        ocp.constraints.ubu = np.array([+Fmax, +Fmax, 0, 0, 0, +Tmax])
+        ocp.constraints.lbu = np.array([-Fmax, -Fmax, -Fmax, -Tmax, -Tmax, -Tmax])
+        ocp.constraints.ubu = np.array([+Fmax, +Fmax, +Fmax, +Tmax, +Tmax, +Tmax])
         ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
+        # # set constraints on X
+        # ocp.constraints.lbx = np.array([0.3, -1.28, -5, -0.5, -0.5, -0.5, -1, -1, -1])
+        # ocp.constraints.ubx = np.array([+3.8, +1.44, +5, +0.5, +0.5, +0.5, +1, +1, +1])
+        # ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5, 10, 11, 12])
+
+        # # set constraints on X at the end of the horizon
+        # ocp.constraints.lbx_e = np.array([0.3, -1.28, -5, -0.5, -0.5, -0.5, -1, -1, -1])
+        # ocp.constraints.ubx_e = np.array([+3.8, +1.44, +5, +0.5, +0.5, +0.5, +1, +1, +1])
+        # ocp.constraints.idxbx_e = ocp.constraints.idxbx
+
         # set constraints on X
-        ocp.constraints.lbx = np.array([0.3, -1.28, -5, -0.5, -0.5, -0.5, -1, -1, -1])
-        ocp.constraints.ubx = np.array([+3.8, +1.44, +5, +0.5, +0.5, +0.5, +1, +1, +1])
-        ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5, 10, 11, 12])
+        ocp.constraints.lbx = np.array([-0.5, -0.5, -0.5, -1, -1, -1])
+        ocp.constraints.ubx = np.array([+0.5, +0.5, +0.5, +1, +1, +1])
+        ocp.constraints.idxbx = np.array([3, 4, 5, 10, 11, 12])
 
         # set constraints on X at the end of the horizon
-        ocp.constraints.lbx_e = np.array([0.3, -1.28, -5, -0.5, -0.5, -0.5, -1, -1, -1])
-        ocp.constraints.ubx_e = np.array([+3.8, +1.44, +5, +0.5, +0.5, +0.5, +1, +1, +1])
+        ocp.constraints.lbx_e = np.array([-0.5, -0.5, -0.5, -1, -1, -1])
+        ocp.constraints.ubx_e = np.array([+0.5, +0.5, +0.5, +1, +1, +1])
         ocp.constraints.idxbx_e = ocp.constraints.idxbx
 
         # To constrain quaternion states, add indices 6–9 to idxbx/idxbx_e and set their bounds in lbx/ubx.

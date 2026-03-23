@@ -38,7 +38,7 @@ __contact__ = "padr@kth.se, jalim@ethz.ch"
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -63,54 +63,98 @@ def generate_launch_description():
         default_value='true',
         description='Publish setpoint pose via rviz'
     )
+    px4_uses_ned_arg = DeclareLaunchArgument(
+        'px4_uses_ned',
+        default_value='true',
+        description='PX4 uses NED frame (default: true) or ENU frame (false)'
+    )
+    camera_arg = DeclareLaunchArgument(
+        'camera',
+        default_value='false',
+        description='Enable camera'
+    )
 
     mode = LaunchConfiguration('mode')
     namespace = LaunchConfiguration('namespace')
     setpoint_from_rviz = LaunchConfiguration('setpoint_from_rviz')
+    px4_uses_ned = LaunchConfiguration('px4_uses_ned')
+    camera = LaunchConfiguration('camera')
 
-    return LaunchDescription([
-        mode_arg,
-        namespace_arg,
-        setpoint_from_rviz_arg,
-        Node(
-            package='px4_mpc',
-            namespace=namespace,
-            executable='mpc_spacecraft',
-            name='mpc_spacecraft',
-            output='screen',
-            emulate_tty=True,
-            parameters=[
-                {'mode': mode},
-                {'setpoint_from_rviz': setpoint_from_rviz}
-            ]
-        ),
-        Node(
-            package='px4_mpc',
-            namespace=namespace,
-            executable='rviz_pos_marker',
-            name='rviz_pos_marker',
-            output='screen',
-            emulate_tty=True,
-            condition=IfCondition(setpoint_from_rviz)
-        ),
-        Node(
-            package='px4_mpc',
-            namespace=namespace,
-            executable='test_setpoints',
-            name='test_setpoints',
-            output='screen',
-            emulate_tty=True,
-            condition=UnlessCondition(setpoint_from_rviz)
-        ),
-        Node(
-            package='px4_offboard',
-            namespace=namespace,
-            executable='visualizer',
-            name='visualizer',
-            condition=IfCondition(setpoint_from_rviz)
-        ),
-        OpaqueFunction(function=launch_setup),
-    ])
+    ld = LaunchDescription()
+
+    ld.add_action(mode_arg)
+    ld.add_action(namespace_arg)
+    ld.add_action(setpoint_from_rviz_arg)
+    ld.add_action(px4_uses_ned_arg)
+    ld.add_action(camera_arg)
+    
+    ld.add_action(Node(
+        package='px4_mpc',
+        namespace=namespace,
+        executable='mpc_spacecraft',
+        name='mpc_spacecraft',
+        output='screen',
+        emulate_tty=True,
+        parameters=[
+            {'mode': mode},
+            {'setpoint_from_rviz': setpoint_from_rviz},
+            {'px4_uses_ned': px4_uses_ned},
+            {'camera': camera}
+        ]
+    ))
+    
+    ld.add_action(Node(
+        package='px4_mpc',
+        namespace=namespace,
+        executable='rviz_pos_marker',
+        name='rviz_pos_marker',
+        output='screen',
+        emulate_tty=True,
+        condition=IfCondition(setpoint_from_rviz)
+    ))
+    
+    # ld.add_action(Node(
+    #     package='px4_mpc',
+    #     namespace=namespace,
+    #     executable='test_setpoints',
+    #     name='test_setpoints',
+    #     output='screen',
+    #     emulate_tty=True,
+    #     condition=UnlessCondition(setpoint_from_rviz)
+    # ))
+    
+    ld.add_action(Node(
+        package='px4_mpc',
+        namespace=namespace,
+        executable='visualizer',
+        name='visualizer',
+        parameters=[
+            {'px4_uses_ned': px4_uses_ned},
+            {'camera': camera}
+        ],
+        condition=IfCondition(setpoint_from_rviz)
+    ))
+    
+    ld.add_action(OpaqueFunction(function=launch_setup))
+
+    # ros2 launch realsense2_camera rs_launch.py publish_tf:=true
+    ld.add_action(Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_tf_world_to_inertial',
+        arguments=['0', '0', '0', '0', '0', '0', 'map', 'inertial'],
+        condition=IfCondition(camera)
+    ))
+    
+    ld.add_action(Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_tf_world_to_camera',
+        arguments=['2', '1.9', '2.3', '0.3010647', '0.3013046', '-0.6395013', '0.6400107', 'map', 'camera_link'], # camera 2
+        condition=IfCondition(camera)
+    ))
+
+    return ld
 
 def patch_rviz_config(original_config_path, namespace):
     """

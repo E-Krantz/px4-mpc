@@ -1,6 +1,6 @@
 Panels:
   - Class: rviz_common/Displays
-    Help Height: 78
+    Help Height: 70
     Name: Displays
     Property Tree Widget:
       Expanded:
@@ -12,8 +12,10 @@ Panels:
         - /InteractiveMarkers1
         - /Marker1
         - /Marker1/Topic1
+        - /Camera1
+        - /Camera1/Visibility1
       Splitter Ratio: 0.5
-    Tree Height: 895
+    Tree Height: 815
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -48,9 +50,9 @@ Visualization Manager:
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
       Value: true
-    - Alpha: 0.7
-      Axes Length: 0.3
-      Axes Radius: 0.03
+    - Alpha: 1
+      Axes Length: 0.30000001192092896
+      Axes Radius: 0.029999999329447746
       Class: rviz_default_plugins/Pose
       Color: 255; 25; 0
       Enabled: true
@@ -66,9 +68,9 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: __NS__/px4_visualizer/vehicle_pose
+        Value: /pop/px4_visualizer/vehicle_pose
       Value: true
-    - Alpha: 0.7
+    - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
       Color: 25; 255; 0
@@ -77,7 +79,7 @@ Visualization Manager:
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.02
+      Line Width: 0.019999999552965164
       Name: Path
       Offset:
         X: 0
@@ -94,9 +96,9 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: __NS__/px4_visualizer/vehicle_path
+        Value: /pop/px4_visualizer/vehicle_path
       Value: true
-    - Alpha: 0.7
+    - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
       Color: 25; 0; 255
@@ -105,7 +107,7 @@ Visualization Manager:
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.02
+      Line Width: 0.019999999552965164
       Name: Path
       Offset:
         X: 0
@@ -122,12 +124,12 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: __NS__/px4_mpc/predicted_path
+        Value: /pop/px4_mpc/predicted_path
       Value: true
     - Class: rviz_default_plugins/InteractiveMarkers
       Enable Transparency: true
       Enabled: true
-      Interactive Markers Namespace: __NS__/rviz_target_pose_marker
+      Interactive Markers Namespace: /pop/rviz_target_pose_marker
       Name: InteractiveMarkers
       Show Axes: true
       Show Descriptions: true
@@ -144,14 +146,14 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: __NS__/px4_mpc/reference
+        Value: /pop/px4_mpc/reference
       Value: true
     - Class: rviz_default_plugins/Camera
       Enabled: true
       Far Plane Distance: 100
       Image Rendering: background and overlay
       Name: Camera
-      Overlay Alpha: 0.15
+      Overlay Alpha: 0.15000000596046448
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -213,7 +215,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 18.703487396240234
+      Distance: 11.216394424438477
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -228,14 +230,14 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.9803978204727173
+      Pitch: 0.9703977108001709
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.785431385040283
+      Yaw: 4.1954169273376465
     Saved: ~
 Window Geometry:
   Camera:
-    collapsed: true
+    collapsed: false
   Displays:
     collapsed: false
   Height: 1043

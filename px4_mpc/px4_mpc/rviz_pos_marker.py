@@ -90,8 +90,7 @@ def make6DofMarker(server, menu_handler, process_feedback, fixed, interaction_mo
     int_marker = InteractiveMarker()
     int_marker.header.frame_id = 'map'
     int_marker.pose.position = position
-    int_marker.scale = 1.0
-
+    int_marker.scale = 0.3
     int_marker.name = 'simple_6dof'
 
     # insert a box
