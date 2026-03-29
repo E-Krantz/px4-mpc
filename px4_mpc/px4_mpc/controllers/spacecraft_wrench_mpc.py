@@ -35,7 +35,7 @@ from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver
 import numpy as np
 import casadi as cs
 import os
-from px4_mpc.utils.rotations import quat_mult_cs
+from px4_mpc.utils.rotations import quat_error_v_cs
 
 class SpacecraftWrenchMPC():
     def __init__(self, model):
@@ -95,15 +95,7 @@ class SpacecraftWrenchMPC():
         x = ocp.model.x
         u = ocp.model.u
 
-        q = x[6:10]
-        q = q / (cs.norm_2(q) + 1e-8)
-        q_ref = x_ref[6:10]
-        q_ref = cs.sign(cs.dot(q, q_ref)) * q_ref # Ensure q_ref has the same sign as q
-        q_error_v = cs.vertcat(
-            q_ref[0]*q[1] - q_ref[1]*q[0] - q_ref[2]*q[3] + q_ref[3]*q[2],
-            q_ref[0]*q[2] + q_ref[1]*q[3] - q_ref[2]*q[0] - q_ref[3]*q[1],
-            q_ref[0]*q[3] - q_ref[1]*q[2] + q_ref[2]*q[1] - q_ref[3]*q[0]
-        )
+        q_error_v = quat_error_v_cs(x[6:10], x_ref[6:10])
 
         x_error = x[0:3] - x_ref[0:3]
         x_error = cs.vertcat(x_error, x[3:6] - x_ref[3:6])

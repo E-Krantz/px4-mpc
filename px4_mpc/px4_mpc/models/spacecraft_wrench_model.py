@@ -53,27 +53,6 @@ class SpacecraftWrenchModel():
         self.A, self.B = self.sym_linearization()
 
     def create_model(self):
-        def skew_symmetric(v):
-            return ca.vertcat(ca.horzcat(0, -v[0], -v[1], -v[2]),
-                              ca.horzcat(v[0], 0, v[2], -v[1]),
-                              ca.horzcat(v[1], -v[2], 0, v[0]),
-                              ca.horzcat(v[2], v[1], -v[0], 0))
-
-        def q_to_rot_mat(q):
-            qw, qx, qy, qz = q[0], q[1], q[2], q[3]
-
-            rot_mat = ca.vertcat(
-                ca.horzcat(1 - 2 * (qy ** 2 + qz ** 2), 2 * (qx * qy - qw * qz), 2 * (qx * qz + qw * qy)),
-                ca.horzcat(2 * (qx * qy + qw * qz), 1 - 2 * (qx ** 2 + qz ** 2), 2 * (qy * qz - qw * qx)),
-                ca.horzcat(2 * (qx * qz - qw * qy), 2 * (qy * qz + qw * qx), 1 - 2 * (qx ** 2 + qy ** 2)))
-
-            return rot_mat
-
-        def v_dot_q(v, q):
-            rot_mat = q_to_rot_mat(q)
-
-            return ca.mtimes(rot_mat, v)
-
         # set up states & controls
         p      = ca.MX.sym('p', 3)
         v      = ca.MX.sym('v', 3)
@@ -96,8 +75,8 @@ class SpacecraftWrenchModel():
 
         # dynamics
         self.f_expl = ca.vertcat(v,
-                                 v_dot_q(F, q) / self.mass,
-                                 1.0 / 2 * ca.mtimes(skew_symmetric(w), q),
+                                 R.v_dot_q_cs(F, q) / self.mass,
+                                 1.0 / 2 * ca.mtimes(R.skew_symmetric_cs(w), q),
                                  ca.inv(self.inertia) @ (tau - ca.cross(w, self.inertia @ w))
                                  )
         self.dynamics = ca.Function('f', [self.x, self.u], [self.f_expl])

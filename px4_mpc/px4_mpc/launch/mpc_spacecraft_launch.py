@@ -38,7 +38,7 @@ __contact__ = "padr@kth.se, jalim@ethz.ch"
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -113,15 +113,15 @@ def generate_launch_description():
         condition=IfCondition(setpoint_from_rviz)
     ))
     
-    # ld.add_action(Node(
-    #     package='px4_mpc',
-    #     namespace=namespace,
-    #     executable='test_setpoints',
-    #     name='test_setpoints',
-    #     output='screen',
-    #     emulate_tty=True,
-    #     condition=UnlessCondition(setpoint_from_rviz)
-    # ))
+    ld.add_action(Node(
+        package='px4_mpc',
+        namespace=namespace,
+        executable='test_setpoints',
+        name='test_setpoints',
+        output='screen',
+        emulate_tty=True,
+        condition=UnlessCondition(setpoint_from_rviz)
+    ))
     
     ld.add_action(Node(
         package='px4_mpc',

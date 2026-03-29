@@ -37,10 +37,10 @@ import casadi as cs
 import os
 from px4_mpc.utils.rotations import quat_error_v_cs
 
-class SpacecraftDirectAllocationMPC():
+class SpacecraftPropellerMPC():
     def __init__(self, model):
         self.model = model
-        self.Tf = 5.0
+        self.Tf = 3.0
         self.N = 29
 
         self.x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -75,14 +75,14 @@ class SpacecraftDirectAllocationMPC():
 
         # set cost
         Q_mat = [1e0, 1e0, 1e0,
-                 2e0, 2e0, 2e0,
-                 5e1, 5e1, 5e1,
-                 5e0, 5e0, 5e0]
+                 1e1, 1e1, 1e1,
+                 5e0, 5e0, 5e0,
+                 2e1, 2e1, 2e1]
         R_mat = [5e-1] * 4
 
         ocp.cost.W_0 = np.diag(Q_mat + R_mat)
         ocp.cost.W = np.diag(Q_mat + R_mat)
-        ocp.cost.W_e = 20 * np.diag(Q_mat)
+        ocp.cost.W_e = 10 * np.diag(Q_mat)
 
         # References:
         x_ref = cs.MX.sym('x_ref', (13, 1))

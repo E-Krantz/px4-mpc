@@ -42,6 +42,7 @@ from rclpy.node import Node
 from rclpy.clock import Clock
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
+from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped, Vector3Stamped
 from visualization_msgs.msg import Marker
@@ -89,6 +90,7 @@ class SpacecraftMPC(Node):
         self.set_publishers_subscribers(qos_profile)
 
         timer_period = 0.1  # seconds
+        timer_period = 0.05 if self.mode == 'propeller' else timer_period
         self.timer = self.create_timer(timer_period, self.cmdloop_callback)
 
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
@@ -116,6 +118,11 @@ class SpacecraftMPC(Node):
             from px4_mpc.controllers.spacecraft_direct_allocation_mpc import SpacecraftDirectAllocationMPC
             self.model = SpacecraftDirectAllocationModel()
             self.mpc = SpacecraftDirectAllocationMPC(self.model)
+        elif self.mode == 'propeller':
+            from px4_mpc.models.spacecraft_propeller_model import SpacecraftPropellerModel
+            from px4_mpc.controllers.spacecraft_propeller_mpc import SpacecraftPropellerMPC
+            self.model = SpacecraftPropellerModel()
+            self.mpc = SpacecraftPropellerMPC(self.model)
 
         self.vehicle_attitude = np.array([1.0, 0.0, 0.0, 0.0])
         self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
@@ -209,6 +216,10 @@ class SpacecraftMPC(Node):
             VehicleTorqueSetpoint,
             'fmu/in/vehicle_torque_setpoint',
             qos_profile)
+        self.publisher_propeller_setpoint = self.create_publisher(
+            Float32MultiArray,
+            'prop_plate/external_motor_cmd',
+            10)
         self.predicted_path_pub = self.create_publisher(
             Path,
             'px4_mpc/predicted_path',
@@ -375,6 +386,13 @@ class SpacecraftMPC(Node):
         actuator_outputs_msg.control[:len(thrust_command)] = thrust_command
         self.publisher_direct_actuator.publish(actuator_outputs_msg)
 
+    def publish_propeller_setpoint(self, u_pred):
+        propeller_outputs_msg = Float32MultiArray()
+        thrust_command = u_pred[0, :]
+        thrust_command = np.clip(np.array(thrust_command, dtype=np.float32), self.model.min_thrust, self.model.max_thrust)
+        propeller_outputs_msg.data = thrust_command.tolist()
+        self.publisher_propeller_setpoint.publish(propeller_outputs_msg)
+
     def publish_disturbance_estimate(self, d_hat):
         disturbance_msg = Vector3Stamped()
         disturbance_msg.header.stamp = Clock().now().to_msg()
@@ -464,7 +482,7 @@ class SpacecraftMPC(Node):
         offboard_msg.direct_actuator = False
         if self.mode == 'rate':
             offboard_msg.body_rate = True
-        elif self.mode == 'direct_allocation':
+        elif self.mode == 'direct_allocation' or self.mode == 'propeller':
             offboard_msg.direct_actuator = True
         elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench':
             offboard_msg.thrust_and_torque = True
@@ -525,7 +543,7 @@ class SpacecraftMPC(Node):
                                   np.zeros(3),                  # velocity
                                   self.setpoint_attitude[0:],       # attitude
                                   np.zeros(3)), axis=0)         # angular velocity
-        elif self.mode == 'direct_allocation':
+        elif self.mode == 'direct_allocation' or self.mode == 'propeller':
             x0 = np.array([self.vehicle_local_position[0],
                            self.vehicle_local_position[1],
                            self.vehicle_local_position[2],
@@ -574,6 +592,8 @@ class SpacecraftMPC(Node):
                 self.publish_direct_actuator_setpoint(u_pred)
             elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench':
                 self.publish_wrench_setpoint(u_pred)
+            elif self.mode == 'propeller':
+                self.publish_propeller_setpoint(u_pred)
 
     def add_set_pose_callback(self, request, response):
         self.setpoint_position[0] = request.pose.position.x

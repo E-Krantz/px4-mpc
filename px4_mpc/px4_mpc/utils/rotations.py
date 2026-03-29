@@ -15,7 +15,6 @@ def skew_symmetric_np(v):
                      [v[2], v[1], -v[0], 0]])
 
 def q_to_rot_mat_cs(q):
-    # ENU->FLU
     qw, qx, qy, qz = q[0], q[1], q[2], q[3]
 
     rot_mat = cs.vertcat(
@@ -59,3 +58,13 @@ def v_dot_q_np(v, q):
     rot_mat = q_to_rot_mat_np(q)
 
     return np.dot(rot_mat, v)
+
+def quat_error_v_cs(q, q_ref):
+    q = q / (cs.norm_2(q) + 1e-8) # Normalize to avoid numerical issues
+    q_ref = cs.sign(cs.dot(q, q_ref)) * q_ref # Ensure q_ref has the same sign as q to avoid discontinuity
+    q_error_v = cs.vertcat(
+        q_ref[0]*q[1] - q_ref[1]*q[0] - q_ref[2]*q[3] + q_ref[3]*q[2],
+        q_ref[0]*q[2] + q_ref[1]*q[3] - q_ref[2]*q[0] - q_ref[3]*q[1],
+        q_ref[0]*q[3] - q_ref[1]*q[2] + q_ref[2]*q[1] - q_ref[3]*q[0]
+    )
+    return q_error_v

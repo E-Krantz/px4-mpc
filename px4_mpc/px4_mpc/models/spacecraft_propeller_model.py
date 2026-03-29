@@ -36,15 +36,16 @@ import casadi as cs
 import numpy as np
 import px4_mpc.utils.rotations as R
 
-class SpacecraftDirectAllocationModel():
+class SpacecraftPropellerModel():
     def __init__(self):
-        self.name = 'spacecraft_direct_allocation_model'
+        self.name = 'spacecraft_propeller_model'
 
         # constants
         self.mass = 17.8
         self.inertia = np.diag([0.315]*3)
+        self.min_thrust = -1.5
         self.max_thrust = 1.5
-        self.torque_arm_length = 0.12
+        self.torque_arm_length = 0.105
 
     def get_acados_model(self) -> AcadosModel:
         model = AcadosModel()
@@ -59,16 +60,16 @@ class SpacecraftDirectAllocationModel():
 
         u = cs.MX.sym('u', 4)
         D_mat = cs.MX.zeros(2, 4)
-        D_mat[0, 0] = 1
+        D_mat[0, 0] = -1
         D_mat[0, 1] = 1
         D_mat[1, 2] = -1
-        D_mat[1, 3] = -1
+        D_mat[1, 3] = 1
 
         # L mat
         L_mat = cs.MX.zeros(1, 4)
-        L_mat[0, 0] = -1
+        L_mat[0, 0] = 1
         L_mat[0, 1] = 1
-        L_mat[0, 2] = -1
+        L_mat[0, 2] = 1
         L_mat[0, 3] = 1
         L_mat = L_mat * self.torque_arm_length
 
@@ -89,12 +90,24 @@ class SpacecraftDirectAllocationModel():
         q_normalized = q / cs.norm_2(q)
         a_thrust = R.v_dot_q_cs(F, q_normalized)/self.mass
 
-        # dynamics
-        f_expl = cs.vertcat(v,
-                            a_thrust,
-                            1 / 2 * cs.mtimes(R.skew_symmetric_cs(w), q_normalized),
-                            np.linalg.inv(self.inertia) @ (tau - cs.cross(w, self.inertia @ w))
-                            )
+        # dynamics with planar constraints: v_z = 0, w_x = 0, w_y = 0
+        # Enforce v[2] = 0, w[0] = 0, w[1] = 0
+        v_planar = cs.vertcat(v[0], v[1], 0.0)
+        w_planar = cs.vertcat(0.0, 0.0, w[2])
+
+        # Only propagate planar velocities and yaw
+        a_thrust_planar = cs.vertcat(a_thrust[0], a_thrust[1], 0.0)
+        w_dot_planar = cs.vertcat(0.0, 0.0, (1/self.inertia[2,2]) * (tau[2] - 0.0))
+
+        # Quaternion derivative only for planar rotation (about z)
+        q_dot_planar = 1 / 2 * cs.mtimes(R.skew_symmetric_cs(w_planar), q_normalized)
+
+        f_expl = cs.vertcat(
+            v_planar,                # p_dot
+            a_thrust_planar,         # v_dot
+            q_dot_planar,            # q_dot
+            w_dot_planar             # w_dot
+        )
 
         f_impl = xdot - f_expl
 
