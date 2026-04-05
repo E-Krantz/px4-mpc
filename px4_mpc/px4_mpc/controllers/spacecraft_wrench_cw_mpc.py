@@ -37,13 +37,16 @@ import casadi as cs
 import os
 from px4_mpc.utils.rotations import quat_error_v_cs
 
-class SpacecraftPropellerMPC():
-    def __init__(self, model):
-        self.model = model
-        self.Tf = 2.0
-        self.N = 20
+class SpacecraftWrenchCWMPC():
+    def __init__(self, model, skip_build=False):
+        # Skip Acados code generation and compilation if True (rebuild needed if model or parameters change)
+        self.skip_build = skip_build
 
-        self.x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.model = model
+        self.Tf = 3.0
+        self.N = 30
+
+        self.x0 = np.array([0.01, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
         self.ocp_solver, self.integrator = self.setup(self.x0, self.N, self.Tf)
 
@@ -62,12 +65,12 @@ class SpacecraftPropellerMPC():
         # set model
         model = self.model.get_acados_model()
         Fmax = self.model.max_thrust
+        Tmax = self.model.max_torque
 
         ocp.model = model
 
         nx = model.x.size()[0]
         nu = model.u.size()[0]
-        print(f"nx: {nx}, nu: {nu}")
 
         # set dimensions
         ocp.dims.N = N_horizon
@@ -75,22 +78,23 @@ class SpacecraftPropellerMPC():
 
         # set cost
         Q_mat = [1e0, 1e0, 1e0,
-                 1e1, 1e1, 1e1,
-                 1e0, 1e0, 1e0,
-                 1e0, 1e0, 1e0]
-        R_mat = [1e-2] * 4
+                 1e2, 1e2, 1e2,
+                 5e0, 5e0, 5e0,
+                 1e1, 1e1, 1e1]
+        R_mat = [1e-1, 1e-1, 1e-1,
+                 1e1, 1e1, 1e1]
 
         ocp.cost.W_0 = np.diag(Q_mat + R_mat)
         ocp.cost.W = np.diag(Q_mat + R_mat)
-        ocp.cost.W_e = 10 * np.diag(Q_mat)
+        ocp.cost.W_e = 20 * np.diag(Q_mat)
 
         # References:
         x_ref = cs.MX.sym('x_ref', (13, 1))
-        u_ref = cs.MX.sym('u_ref', (4, 1))
+        u_ref = cs.MX.sym('u_ref', (6, 1))
 
         # Calculate errors
-        # x : p,v,q,w                               , R9 x SO(3)
-        # u : Thruster pairs (0&1, 2&3, 4&5, 6&7)   , R4
+        # x : p,v,q,w               , R9 x SO(3)
+        # u : Fx,Fy,Fz,Mx,My,Mz     , R6
         x = ocp.model.x
         u = ocp.model.u
 
@@ -122,19 +126,9 @@ class SpacecraftPropellerMPC():
         ocp.parameter_values = p_0
 
         # set constraints on U
-        ocp.constraints.lbu = np.array([-Fmax, -Fmax, -Fmax, -Fmax])
-        ocp.constraints.ubu = np.array([+Fmax, +Fmax, +Fmax, +Fmax])
-        ocp.constraints.idxbu = np.array([0, 1, 2, 3])
-
-        # set constraints on X
-        ocp.constraints.lbx = np.array([-2.0, -2.0, -1])
-        ocp.constraints.ubx = np.array([+2.0, +2.0, +1])
-        ocp.constraints.idxbx = np.array([3, 4, 12])
-
-        # set constraints on X at the end of the horizon
-        ocp.constraints.lbx_e = np.array([-2.0, -2.0, -1])
-        ocp.constraints.ubx_e = np.array([+2.0, +2.0, +1])
-        ocp.constraints.idxbx_e = ocp.constraints.idxbx
+        ocp.constraints.lbu = np.array([-Fmax, -Fmax, 0, 0, 0, -Tmax])
+        ocp.constraints.ubu = np.array([+Fmax, +Fmax, 0, 0, 0, +Tmax])
+        ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
         # # set constraints on X
         # ocp.constraints.lbx = np.array([0.3, -1.28, -5, -0.5, -0.5, -0.5, -1, -1, -1])
@@ -145,6 +139,16 @@ class SpacecraftPropellerMPC():
         # ocp.constraints.lbx_e = np.array([0.3, -1.28, -5, -0.5, -0.5, -0.5, -1, -1, -1])
         # ocp.constraints.ubx_e = np.array([+3.8, +1.44, +5, +0.5, +0.5, +0.5, +1, +1, +1])
         # ocp.constraints.idxbx_e = ocp.constraints.idxbx
+
+        # set constraints on X
+        ocp.constraints.lbx = np.array([-0.5, -0.5, -1])
+        ocp.constraints.ubx = np.array([+0.5, +0.5, +1])
+        ocp.constraints.idxbx = np.array([3, 4, 12])
+
+        # set constraints on X at the end of the horizon
+        ocp.constraints.lbx_e = np.array([-0.5, -0.5, -1])
+        ocp.constraints.ubx_e = np.array([+0.5, +0.5, +1])
+        ocp.constraints.idxbx_e = ocp.constraints.idxbx
 
         # To constrain quaternion states, add indices 6–9 to idxbx/idxbx_e and set their bounds in lbx/ubx.
         # Usually not needed. Valid quaternions stay in [-1, 1], and drift is better fixed by renormalising.
@@ -171,12 +175,11 @@ class SpacecraftPropellerMPC():
         ocp.constraints.x0 = x0
 
         # set options
-        ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
+        ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM' #'FULL_CONDENSING_DAQP' # FULL_CONDENSING_QPOASES
         # PARTIAL_CONDENSING_HPIPM, FULL_CONDENSING_QPOASES, FULL_CONDENSING_HPIPM,
         # PARTIAL_CONDENSING_QPDUNES, PARTIAL_CONDENSING_OSQP, FULL_CONDENSING_DAQP
         ocp.solver_options.hessian_approx = 'GAUSS_NEWTON' # 'GAUSS_NEWTON', 'EXACT'
         ocp.solver_options.integrator_type = 'ERK'
-
         # ocp.solver_options.print_level = 1
         use_RTI=True
         if use_RTI:
@@ -186,15 +189,18 @@ class SpacecraftPropellerMPC():
         else:
             ocp.solver_options.nlp_solver_type = 'SQP' # SQP_RTI, SQP
 
-        # ocp.solver_options.qp_solver_cond_N = N_horizon
-        # ocp.solver_options.print_level = 6
+        ocp.solver_options.qp_solver_cond_N = N_horizon
 
         # set prediction horizon
         ocp.solver_options.tf = Tf
 
-        ocp_solver = AcadosOcpSolver(ocp, json_file=json_path)
+        ocp_solver = AcadosOcpSolver(ocp, json_file=json_path,
+                                    generate=not self.skip_build,
+                                    build=not self.skip_build)
         # create an integrator with the same settings as used in the OCP solver.
-        acados_integrator = AcadosSimSolver(ocp, json_file=json_path)
+        acados_integrator = AcadosSimSolver(ocp, json_file=json_path,
+                                    generate=not self.skip_build,
+                                    build=not self.skip_build)
 
         return ocp_solver, acados_integrator
 
@@ -219,8 +225,8 @@ class SpacecraftPropellerMPC():
                 ocp_solver.set(i, "p", zero_ref)
 
         # set initial state
-        ocp_solver.set(0, "lbx", x0.flatten())
-        ocp_solver.set(0, "ubx", x0.flatten())
+        ocp_solver.set(0, "lbx", x0)
+        ocp_solver.set(0, "ubx", x0)
 
         status = ocp_solver.solve()
         if verbose:

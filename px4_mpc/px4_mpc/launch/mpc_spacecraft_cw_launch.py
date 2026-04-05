@@ -48,7 +48,7 @@ import tempfile
 def generate_launch_description():
     mode_arg = DeclareLaunchArgument(
         'mode',
-        default_value='wrench',
+        default_value='wrench_cw',
         description='Mode of the controller (rate, wrench, direct_allocation)'
     )
 
@@ -60,39 +60,44 @@ def generate_launch_description():
 
     setpoint_from_rviz_arg = DeclareLaunchArgument(
         'setpoint_from_rviz',
-        default_value='true',
+        default_value='False',
         description='Publish setpoint pose via rviz'
     )
     px4_uses_ned_arg = DeclareLaunchArgument(
         'px4_uses_ned',
-        default_value='true',
+        default_value='True',
         description='PX4 uses NED frame (default: true) or ENU frame (false)'
     )
     camera_arg = DeclareLaunchArgument(
         'camera',
-        default_value='false',
+        default_value='False',
         description='Enable camera'
     )
     orbit_period_arg = DeclareLaunchArgument(
         'orbit_period',
-        default_value='2.0',
+        default_value='90.0',
         description='Period of the orbit in minutes'
     )
+    skip_build_arg = DeclareLaunchArgument(
+        'skip_build',
+        default_value='False',
+        description='Skip code generation and building of acados solver (faster)'
+    )
 
-    mode = LaunchConfiguration('mode')
     namespace = LaunchConfiguration('namespace')
     setpoint_from_rviz = LaunchConfiguration('setpoint_from_rviz')
     px4_uses_ned = LaunchConfiguration('px4_uses_ned')
     camera = LaunchConfiguration('camera')
     orbit_period = LaunchConfiguration('orbit_period')
+    skip_build = LaunchConfiguration('skip_build')
+    
     ld = LaunchDescription()
-
-    ld.add_action(mode_arg)
     ld.add_action(namespace_arg)
     ld.add_action(setpoint_from_rviz_arg)
     ld.add_action(px4_uses_ned_arg)
     ld.add_action(camera_arg)
     ld.add_action(orbit_period_arg)
+    ld.add_action(skip_build_arg)
     
     ld.add_action(Node(
         package='px4_mpc',
@@ -102,10 +107,12 @@ def generate_launch_description():
         output='screen',
         emulate_tty=True,
         parameters=[
-            {'mode': mode},
+            {'mode': 'wrench_cw'},
             {'setpoint_from_rviz': setpoint_from_rviz},
             {'px4_uses_ned': px4_uses_ned},
             {'camera': camera},
+            {'orbit_period': orbit_period},
+            {'skip_build': skip_build}
         ]
     ))
     
@@ -126,21 +133,10 @@ def generate_launch_description():
         name='cw_planner',
         output='screen',
         emulate_tty=True,
-        condition=IfCondition(PythonExpression(["'", mode, "' == 'wrench_cw'"])),
         parameters=[
             {'orbit_period': orbit_period},  # period in minutes
         ]
     ))
-
-    # ld.add_action(Node(
-    #     package='px4_mpc',
-    #     namespace=namespace,
-    #     executable='test_setpoints',
-    #     name='test_setpoints',
-    #     output='screen',
-    #     emulate_tty=True,
-    #     condition=UnlessCondition(setpoint_from_rviz)
-    # ))
     
     ld.add_action(Node(
         package='px4_mpc',

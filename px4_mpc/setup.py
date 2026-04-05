@@ -29,6 +29,9 @@ setup(
                 'test_setpoints = px4_mpc.test.test_setpoints:main',
                 'rviz_pos_marker = px4_mpc.rviz_pos_marker:main',
                 'visualizer = px4_mpc.visualizer:main',
+                'cw_planner = px4_mpc.planner.cw_planner:main',
+                'cw_dynamics_mpc = px4_mpc.cw_dynamics_mpc:main',
+                'cw_trajectory_node = px4_mpc.planner.cw_trajectory_node:main',
         ],
     },
 )

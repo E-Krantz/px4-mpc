@@ -46,6 +46,7 @@ from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped, Vector3Stamped
 from visualization_msgs.msg import Marker
+from trajectory_msgs.msg import JointTrajectory
 
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import VehicleStatus
@@ -59,6 +60,8 @@ from px4_msgs.msg import VehicleThrustSetpoint
 
 from mpc_msgs.srv import SetPose
 
+from px4_mpc.utils.rotations import q_to_rot_mat_np
+
 DATA_VALIDITY_STREAM = 0.5 # seconds, threshold for (pos,att,vel) messages
 DATA_VALIDITY_STATUS = 2.0 # seconds, threshold for status message
 
@@ -71,6 +74,9 @@ class SpacecraftMPC(Node):
         self.mode = self.declare_parameter('mode', 'wrench').value
         self.sitl = self.declare_parameter('sitl', False).value
         self.use_ned = self.declare_parameter('px4_uses_ned', True).value
+        self.orbit_period = self.declare_parameter('orbit_period', 90.0).value
+        self.skip_build = self.declare_parameter('skip_build', False).value
+        self.get_logger().info(f'MPC mode: {self.mode}, SITL: {self.sitl}, PX4 uses NED: {self.use_ned}, Orbit period: {self.orbit_period} min, Skip build: {self.skip_build}')
 
         # Get setpoint from rviz (true/false)
         self.setpoint_from_rviz = self.declare_parameter('setpoint_from_rviz', False).value
@@ -123,13 +129,24 @@ class SpacecraftMPC(Node):
             from px4_mpc.controllers.spacecraft_propeller_mpc import SpacecraftPropellerMPC
             self.model = SpacecraftPropellerModel()
             self.mpc = SpacecraftPropellerMPC(self.model)
+        elif self.mode == 'wrench_cw':
+            from px4_mpc.models.spacecraft_wrench_cw_model import SpacecraftWrenchCWModel
+            from px4_mpc.controllers.spacecraft_wrench_cw_mpc import SpacecraftWrenchCWMPC
+            self.model = SpacecraftWrenchCWModel(orbital_period=self.orbit_period)
+            self.mpc = SpacecraftWrenchCWMPC(self.model, skip_build=self.skip_build)
 
         self.vehicle_attitude = np.array([1.0, 0.0, 0.0, 0.0])
         self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
         self.vehicle_angular_velocity = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
-        self.setpoint_position = np.array([1.0, 0.0, 0.0])
+        self.setpoint_position = np.array([1.0, 0.0, 0.0])if self.mode != 'wrench_cw' else np.array([0.0, 1.0, 0.0])
+        self.setpoint_velocity = np.array([0.0, 0.0, 0.0])
         self.setpoint_attitude = np.array([1.0, 0.0, 0.0, 0.0])
+        self.setpoint_angular_velocity = np.array([0.0, 0.0, 0.0])
+
+        self.trajectory_positions = None  # Will be Nx3 numpy array
+        self.trajectory_velocities = None  # Will be Nx3 numpy array
+        self.setpoint_trajectory_ready = False
 
         # Set initial timestamps
         self.vehicle_attitude_timestamp = -np.inf
@@ -189,6 +206,19 @@ class SpacecraftMPC(Node):
                 self.add_set_pose_callback
             )
         else:
+            if self.mode == 'wrench_cw':
+                self.setpoint_odom_sub = self.create_subscription(
+                    Odometry,
+                    'px4_mpc/setpoint_odom',
+                    self.get_setpoint_odom_callback,
+                    0
+                )
+                self.setpoint_trajectory_sub = self.create_subscription(
+                    JointTrajectory,
+                    'px4_mpc/setpoint_trajectory',
+                    self.get_setpoint_trajectory_callback,
+                    0
+                )
             self.setpoint_pose_sub = self.create_subscription(
                 PoseStamped,
                 'px4_mpc/setpoint_pose',
@@ -387,9 +417,11 @@ class SpacecraftMPC(Node):
         self.publisher_direct_actuator.publish(actuator_outputs_msg)
 
     def publish_propeller_setpoint(self, u_pred):
+        min_thrust = -1.5
+        max_thrust = 1.5
         propeller_outputs_msg = Float32MultiArray()
         thrust_command = u_pred[0, :]
-        thrust_command = np.clip(np.array(thrust_command, dtype=np.float32), self.model.min_thrust, self.model.max_thrust)
+        thrust_command = np.clip(np.array(thrust_command, dtype=np.float32), min_thrust, max_thrust)
         propeller_outputs_msg.data = thrust_command.tolist()
         self.publisher_propeller_setpoint.publish(propeller_outputs_msg)
 
@@ -458,7 +490,6 @@ class SpacecraftMPC(Node):
         if (current_time - self.vehicle_status_timestamp > DATA_VALIDITY_STATUS):
             self.get_logger().warn("Vehicle status data is too old. Skipping offboard control...")
             ret_val = False
-
         return ret_val
 
     def cmdloop_callback(self):
@@ -484,7 +515,7 @@ class SpacecraftMPC(Node):
             offboard_msg.body_rate = True
         elif self.mode == 'direct_allocation' or self.mode == 'propeller':
             offboard_msg.direct_actuator = True
-        elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench':
+        elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench' or self.mode == 'wrench_cw':
             offboard_msg.thrust_and_torque = True
         self.publisher_offboard_mode.publish(offboard_msg)
 
@@ -563,6 +594,68 @@ class SpacecraftMPC(Node):
                                   np.zeros(3),                  # angular velocity
                                   np.zeros(4)), axis=0)         # inputs reference (u1, ..., u4) for 2D platform
             ref = np.repeat(ref.reshape((-1, 1)), self.mpc.N + 1, axis=1)
+        elif self.mode == 'wrench_cw':
+            # Rotate lab frame -90 deg so y (orbit velocity vector) points towards middle of lab space
+            pos_hill = np.array([-self.vehicle_local_position[1], self.vehicle_local_position[0], self.vehicle_local_position[2]])
+            vel_hill = np.array([-self.vehicle_local_velocity[1], self.vehicle_local_velocity[0], self.vehicle_local_velocity[2]])
+            q_enu = self.vehicle_attitude
+            q_hill = np.array([q_enu[0] * np.cos(np.pi/4) - q_enu[3] * np.sin(np.pi/4),
+                                q_enu[1] * np.cos(np.pi/4) - q_enu[2] * np.sin(np.pi/4),
+                                q_enu[1] * np.sin(np.pi/4) + q_enu[2] * np.cos(np.pi/4),
+                                q_enu[0] * np.sin(np.pi/4) + q_enu[3] * np.cos(np.pi/4)])
+
+            x0 = np.array([pos_hill[0],
+                            pos_hill[1],
+                            pos_hill[2],
+                            vel_hill[0],
+                            vel_hill[1],
+                            vel_hill[2],
+                            q_hill[0],
+                            q_hill[1],
+                            q_hill[2],
+                            q_hill[3],
+                            self.vehicle_angular_velocity[0],
+                            self.vehicle_angular_velocity[1],
+                            self.vehicle_angular_velocity[2]]).reshape(13, 1)
+
+            if self.trajectory_positions is None:
+                return
+
+            if self.setpoint_from_rviz:
+                setpoint_pos_hill = np.array([-self.setpoint_position[1], self.setpoint_position[0], self.setpoint_position[2]])
+                setpoint_q_enu = self.setpoint_attitude
+                setpoint_q_hill = np.array([setpoint_q_enu[0] * np.cos(np.pi/4) - setpoint_q_enu[3] * np.sin(np.pi/4),
+                                            setpoint_q_enu[1] * np.cos(np.pi/4) - setpoint_q_enu[2] * np.sin(np.pi/4),
+                                            setpoint_q_enu[1] * np.sin(np.pi/4) + setpoint_q_enu[2] * np.cos(np.pi/4),
+                                            setpoint_q_enu[0] * np.sin(np.pi/4) + setpoint_q_enu[3] * np.cos(np.pi/4)])
+                ref = np.concatenate((setpoint_pos_hill,        # position
+                                        np.zeros(3),            # velocity
+                                        setpoint_q_hill,        # attitude
+                                        np.zeros(3),            # angular velocity
+                                        np.zeros(6)), axis=0)   # inputs reference
+                ref = np.repeat(ref.reshape((-1, 1)), self.mpc.N + 1, axis=1)
+
+            else:
+                # Forward propagate attitude from planner's odom
+                quats, ang_vels = self.forward_propagate_attitude(
+                    self.setpoint_attitude,
+                    self.setpoint_angular_velocity[2],
+                    self.mpc.Tf / self.mpc.N,  # MPC timestep
+                    self.mpc.N
+                )
+
+                N_horizon = self.mpc.N + 1
+                ref = np.zeros((19, N_horizon))
+                for i in range(N_horizon):
+                    if self.setpoint_trajectory_ready and i < len(self.trajectory_positions):
+                        ref[0:3, i] = self.trajectory_positions[i]
+                        ref[3:6, i] = self.trajectory_velocities[i]
+                    else:
+                        ref[0:3, i] = self.setpoint_position
+                        ref[3:6, i] = self.setpoint_velocity
+                    ref[6:10, i] = quats[i]
+                    ref[10:13, i] = ang_vels[i]
+                    ref[13:19, i] = 0.0  # input reference
         else:
             raise ValueError(f'Invalid mode: {self.mode}')
 
@@ -590,10 +683,36 @@ class SpacecraftMPC(Node):
                 self.publish_rate_setpoint(u_pred)
             elif self.mode == 'direct_allocation' or self.mode == 'direct_allocation_trajectory':
                 self.publish_direct_actuator_setpoint(u_pred)
-            elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench':
-                self.publish_wrench_setpoint(u_pred)
+            elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench' or self.mode == 'wrench_cw':
+                 self.publish_wrench_setpoint(u_pred)
             elif self.mode == 'propeller':
                 self.publish_propeller_setpoint(u_pred)
+
+    def forward_propagate_attitude(self, q0, omega_z, dt, N):
+        """Propagate yaw-only attitude over N steps.
+        
+        Returns (N+1) x 4 array of quaternions and (N+1) x 3 array of angular velocities.
+        Angular rate is constant (no torque prediction in the planner horizon).
+        """
+        quats = np.zeros((N + 1, 4))
+        ang_vels = np.zeros((N + 1, 3))
+        quats[0] = q0
+        ang_vels[0] = [0.0, 0.0, omega_z]
+
+        for i in range(1, N + 1):
+            dtheta = omega_z * dt
+            w0, x0, y0, z0 = quats[i - 1]
+            c, s = np.cos(dtheta / 2), np.sin(dtheta / 2)
+            quats[i] = np.array([
+                w0 * c - z0 * s,
+                x0 * c + y0 * s,
+            -x0 * s + y0 * c,
+                w0 * s + z0 * c,
+            ])
+            quats[i] /= np.linalg.norm(quats[i])
+            ang_vels[i] = [0.0, 0.0, omega_z]
+
+        return quats, ang_vels
 
     def add_set_pose_callback(self, request, response):
         self.setpoint_position[0] = request.pose.position.x
@@ -613,6 +732,35 @@ class SpacecraftMPC(Node):
         self.setpoint_attitude[1] = msg.pose.orientation.x
         self.setpoint_attitude[2] = msg.pose.orientation.y
         self.setpoint_attitude[3] = msg.pose.orientation.z
+
+    def get_setpoint_odom_callback(self, msg: Odometry):
+        self.setpoint_position[0] = msg.pose.pose.position.x
+        self.setpoint_position[1] = msg.pose.pose.position.y
+        self.setpoint_position[2] = msg.pose.pose.position.z
+        self.setpoint_velocity[0] = msg.twist.twist.linear.x
+        self.setpoint_velocity[1] = msg.twist.twist.linear.y
+        self.setpoint_velocity[2] = msg.twist.twist.linear.z
+        self.setpoint_attitude[0] = msg.pose.pose.orientation.w
+        self.setpoint_attitude[1] = msg.pose.pose.orientation.x
+        self.setpoint_attitude[2] = msg.pose.pose.orientation.y
+        self.setpoint_attitude[3] = msg.pose.pose.orientation.z
+        self.setpoint_angular_velocity[0] = msg.twist.twist.angular.x
+        self.setpoint_angular_velocity[1] = msg.twist.twist.angular.y
+        self.setpoint_angular_velocity[2] = msg.twist.twist.angular.z
+
+    def get_setpoint_trajectory_callback(self, msg: JointTrajectory):
+        if not msg.points:
+            self.get_logger().warn("Received empty trajectory message. Ignoring...")
+            return
+        N = len(msg.points)
+        positions = np.zeros((N, 3))
+        velocities = np.zeros((N, 3))
+        for i, point in enumerate(msg.points):
+            positions[i] = point.positions[:3]
+            velocities[i] = point.velocities[:3]
+        self.trajectory_positions = positions
+        self.trajectory_velocities = velocities
+        self.setpoint_trajectory_ready = True
 
     def vector2PoseMsg(self, frame_id, position, attitude):
         pose_msg = PoseStamped()
