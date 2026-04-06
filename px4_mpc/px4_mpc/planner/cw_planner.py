@@ -14,7 +14,7 @@ class SetpointPublisher(Node):
         self.orbit_period = self.declare_parameter('orbit_period', 2.0).value  # period in minutes
 
         # Initial setpoint and CW offsets.
-        self.delta_t0 = 10.0  # Time to hold initial position before starting CW motion (seconds)
+        self.delta_t0 = 20.0  # Time to hold initial position before starting CW motion (seconds)
         self.Ax = [3/4, 3/8] # Amplitude in x-direction
         self.y_center = [2.0, 5/4] # Center of the circle in y-direction
         self.pos0 = np.array([0.0, self.y_center[0] + 2 * self.Ax[0], 0.0], dtype=float)
@@ -39,33 +39,61 @@ class SetpointPublisher(Node):
             f'Ax={self.Ax}, y_center={self.y_center}, orbit_period={self.orbit_period} min, n={self.n:.5f} rad/s'
         )
 
-    def evaluate_reference(self, t_elapsed):
-        if t_elapsed < self.delta_t0:
-            pos = self.pos0.copy()
-            vel = np.zeros(3)
-        elif t_elapsed < self.delta_t0 + self.periods * self.orbit_period * 60.0:
-            t_cw = t_elapsed - self.delta_t0
-            Ax, yc = self.Ax[0], self.y_center[0]
-            pos = np.array([Ax * np.sin(self.n * t_cw),
-                            yc + 2*Ax * np.cos(self.n * t_cw), 0.0])
-            vel = np.array([Ax * self.n * np.cos(self.n * t_cw),
-                            -2*Ax * self.n * np.sin(self.n * t_cw), 0.0])
-        elif t_elapsed < self.delta_t0 + 2*self.periods * self.orbit_period * 60.0:
-            t_cw = t_elapsed - self.delta_t0 - self.periods * self.orbit_period * 60.0
-            Ax, yc = self.Ax[1], self.y_center[1]
-            pos = np.array([Ax * np.sin(self.n * t_cw),
-                            yc + 2*Ax * np.cos(self.n * t_cw), 0.0])
-            vel = np.array([Ax * self.n * np.cos(self.n * t_cw),
-                            -2*Ax * self.n * np.sin(self.n * t_cw), 0.0])
-        elif t_elapsed < self.delta_t0 + 4*self.periods * self.orbit_period * 60.0:
-            pos = np.array([1.0, 1.0, 0.0], dtype=float)
-            vel = np.zeros(3)
-        else:
-            # reset timer to loop the trajectory
+    def evaluate_reference(self, t_elapsed, t_query=None):
+        """Evaluate reference at t_query, but clamp to current phase at t_elapsed."""
+        T_hold = 30.0
+        T_orbit = self.periods * self.orbit_period * 60.0
+
+        static_poses = [
+            np.array([0.5, 1.0, 0.0]),
+            np.array([-0.5, 1.5, 0.0]),
+            np.array([0.5, 2.0, 0.0]),
+            np.array([-0.5, 1.0, 0.0]),
+        ]
+
+        phases = [('hold', self.delta_t0, None)]
+        for sp in static_poses:
+            phases.append(('static', T_hold, sp))
+        for i in range(len(self.Ax)):
+            phases.append(('orbit', T_orbit, i))
+
+        # Find current phase based on t_elapsed
+        t = t_elapsed
+        current_phase = None
+        current_t_in_phase = 0.0
+        for phase_type, duration, param in phases:
+            if t < duration:
+                current_phase = (phase_type, duration, param)
+                current_t_in_phase = t
+                break
+            t -= duration
+
+        if current_phase is None:
             self.t0 = time.monotonic()
-            pos = self.pos0.copy()
-            vel = np.zeros(3)
-        return pos, vel
+            return self.pos0.copy(), np.zeros(3)
+
+        # Use t_query if provided, but clamp to current phase
+        if t_query is not None:
+            dt_from_now = t_query - t_elapsed
+            t_in_phase = current_t_in_phase + dt_from_now
+            # Clamp to end of current phase
+            t_in_phase = min(t_in_phase, current_phase[1] - 1e-6)
+            t_in_phase = max(t_in_phase, 0.0)
+        else:
+            t_in_phase = current_t_in_phase
+
+        phase_type, duration, param = current_phase
+        if phase_type == 'hold':
+            return self.pos0.copy(), np.zeros(3)
+        elif phase_type == 'static':
+            return param.copy(), np.zeros(3)
+        elif phase_type == 'orbit':
+            Ax, yc = self.Ax[param], self.y_center[param]
+            pos = np.array([Ax * np.sin(self.n * t_in_phase),
+                            yc + 2 * Ax * np.cos(self.n * t_in_phase), 0.0])
+            vel = np.array([Ax * self.n * np.cos(self.n * t_in_phase),
+                            -2 * Ax * self.n * np.sin(self.n * t_in_phase), 0.0])
+            return pos, vel
 
     def timer_callback(self):
         t_elapsed = time.monotonic() - self.t0
@@ -91,8 +119,8 @@ class SetpointPublisher(Node):
         N = 30
         dt_mpc = 0.1
         for i in range(N+1):
-            t_ref = t_elapsed + i * dt_mpc
-            pos, vel = self.evaluate_reference(t_ref)
+            t_query = t_elapsed + i * dt_mpc
+            pos, vel = self.evaluate_reference(t_elapsed, t_query)
 
             point = JointTrajectoryPoint()
             point.positions = pos.tolist()
