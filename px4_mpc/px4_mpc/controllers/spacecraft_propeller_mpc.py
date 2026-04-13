@@ -78,7 +78,7 @@ class SpacecraftPropellerMPC():
                  1e1, 1e1, 1e1,
                  1e0, 1e0, 1e0,
                  1e0, 1e0, 1e0]
-        R_mat = [1e-2] * 4
+        R_mat = [1e-1] * 4
 
         ocp.cost.W_0 = np.diag(Q_mat + R_mat)
         ocp.cost.W = np.diag(Q_mat + R_mat)

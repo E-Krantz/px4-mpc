@@ -79,8 +79,8 @@ class SpacecraftWrenchCWMPC():
         # set cost
         Q_mat = [1e0, 1e0, 1e0,
                  1e2, 1e2, 1e2,
-                 5e0, 5e0, 5e0,
-                 1e1, 1e1, 1e1]
+                 1e1, 1e1, 1e1,
+                 5e2, 5e2, 5e2]
         R_mat = [1e-1, 1e-1, 1e-1,
                  1e1, 1e1, 1e1]
 

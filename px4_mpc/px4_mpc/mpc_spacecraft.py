@@ -517,7 +517,8 @@ class SpacecraftMPC(Node):
             offboard_msg.direct_actuator = True
         elif self.mode == 'wrench' or self.mode == 'offset_free_wrench' or self.mode == 'lqr_wrench' or self.mode == 'wrench_cw':
             offboard_msg.thrust_and_torque = True
-        self.publisher_offboard_mode.publish(offboard_msg)
+        if not self.mode == 'wrench_cw':
+            self.publisher_offboard_mode.publish(offboard_msg)
 
         # Set state and references for each MPC
         if self.mode == 'rate':
@@ -687,6 +688,7 @@ class SpacecraftMPC(Node):
                  self.publish_wrench_setpoint(u_pred)
             elif self.mode == 'propeller':
                 self.publish_propeller_setpoint(u_pred)
+                self.publish_wrench_setpoint(np.array([[0.0]*6]*self.mpc.N))  # Publish zero wrench setpoint since control is done via propeller setpoint
 
     def forward_propagate_attitude(self, q0, omega_z, dt, N):
         """Propagate yaw-only attitude over N steps.
@@ -697,7 +699,7 @@ class SpacecraftMPC(Node):
         quats = np.zeros((N + 1, 4))
         ang_vels = np.zeros((N + 1, 3))
         quats[0] = q0
-        ang_vels[0] = [0.0, 0.0, omega_z]
+        ang_vels[0] = [0.0, 0.0, 0]
 
         for i in range(1, N + 1):
             dtheta = omega_z * dt
@@ -709,8 +711,10 @@ class SpacecraftMPC(Node):
             -x0 * s + y0 * c,
                 w0 * s + z0 * c,
             ])
-            quats[i] /= np.linalg.norm(quats[i])
-            ang_vels[i] = [0.0, 0.0, omega_z]
+            # quats[i] /= np.linalg.norm(quats[i])
+            # ang_vels[i] = [0.0, 0.0, omega_z]
+            quats[i] = [1.0, 0.0, 0.0, 0.0]
+            ang_vels[i] = [0.0, 0.0, 0.0]
 
         return quats, ang_vels
 

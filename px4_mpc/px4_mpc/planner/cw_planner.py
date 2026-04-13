@@ -15,9 +15,9 @@ class SetpointPublisher(Node):
 
         # Initial setpoint and CW offsets.
         self.delta_t0 = 20.0  # Time to hold initial position before starting CW motion (seconds)
-        self.Ax = [3/4, 3/8] # Amplitude in x-direction
+        self.Ax = [1/2, 3/8] # Amplitude in x-direction
         self.y_center = [2.0, 5/4] # Center of the circle in y-direction
-        self.pos0 = np.array([0.0, self.y_center[0] + 2 * self.Ax[0], 0.0], dtype=float)
+        self.pos0 = np.array([0.0, 2.0, 0.0], dtype=float)
 
         self.n = 2.0 * np.pi / (self.orbit_period * 60.0)  # angular velocity in rad/s
 
@@ -48,7 +48,7 @@ class SetpointPublisher(Node):
             np.array([0.5, 1.0, 0.0]),
             np.array([-0.5, 1.5, 0.0]),
             np.array([0.5, 2.0, 0.0]),
-            np.array([-0.5, 1.0, 0.0]),
+            # np.array([-0.5, 1.0, 0.0]),
         ]
 
         phases = [('hold', self.delta_t0, None)]
