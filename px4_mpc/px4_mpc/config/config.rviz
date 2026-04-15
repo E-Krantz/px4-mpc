@@ -10,8 +10,8 @@ Panels:
         - /Path1
         - /Path2
         - /InteractiveMarkers1
-        - /Marker1
-        - /Marker1/Topic1
+        - /Setpoint1
+        - /Setpoint1/Topic1
       Splitter Ratio: 0.5
     Tree Height: 895
   - Class: rviz_common/Selection
@@ -133,11 +133,18 @@ Visualization Manager:
       Show Descriptions: true
       Show Visual Aids: false
       Value: true
-    - Class: rviz_default_plugins/Marker
+    - Alpha: 1
+      Axes Length: 0.25
+      Axes Radius: 0.02
+      Class: rviz_default_plugins/Pose
+      Color: 255; 25; 0
       Enabled: true
-      Name: Marker
-      Namespaces:
-        arrow: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: Setpoint
+      Shaft Length: 1
+      Shaft Radius: 0.05000000074505806
+      Shape: Axes
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -162,7 +169,7 @@ Visualization Manager:
       Visibility:
         Grid: true
         InteractiveMarkers: true
-        Marker: true
+        Setpoint: true
         Path: true
         Pose: true
         Value: true

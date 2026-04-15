@@ -85,7 +85,7 @@ make px4_sitl_spacecraft gz_atmos
 
 On another terminal, run
 ```bash
-ros2 launch px4_mpc mpc_spacecraft_launch.py mode:=wrench setpoint_from_rviz:=False
+ros2 launch px4_mpc mpc_spacecraft_launch.py mode:=wrench use_rviz:=False
 ```
 
 Then, in the same terminal where you started the PX4 SITL, you can control ATMOS using the following commands:
@@ -104,11 +104,11 @@ At this point, the vehicle should start following the desired setpoints.
 The `mpc_spacecraft_launch.py` file includes optional arguments:
 - **mode**: Control mode (wrench by default). Options: wrench, rate, direct_allocation and _offset free_. For offset free MPC, please install the package [OpenMPC](https://github.com/mikaelj-kth-se/OpenMPC).  
 - **namespace**: Spacecraft namespace ('' by default).  
-- **setpoint_from_rviz**: Use RViz for setpoints (True by default).
+- **use_rviz**: Use RViz for setpoints (True by default).
 
 **Example with no namespace:**
 ```bash
-ros2 launch px4_mpc mpc_spacecraft_launch.py mode:=wrench setpoint_from_rviz:=False
+ros2 launch px4_mpc mpc_spacecraft_launch.py mode:=wrench use_rviz:=False
 ```
 
 **Example with namespace:**

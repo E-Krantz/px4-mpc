@@ -30,12 +30,19 @@ class SetpointPublisher(Node):
             ]
         else:
             self.setpoints = [
-                (0.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
-                (1.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
-                (1.4, -0.8, 0.0, 0.0, 0.0, 0.383, 0.924),
-                (1.4, 0.2, 0.0, 0.0, 0.0, 0.707, 0.707),
-                (0.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
+                (0.8, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+                (2.06, 1.0, 0.0, 0.0, 0.0, 0.383, 0.924),
+                (3.0, 0.5, 0.0, 0.0, 0.0, 0.383, 0.924),
+                (1.75, 0.0, 0.0, 0.0, 0.0, 0.707, 0.707),
+                (0.75, 0.0, 0.0, 0.0, 0.0, 0.383, 0.924),
             ]
+            # self.setpoints = [
+            #     (0.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
+            #     (1.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
+            #     (1.4, -0.8, 0.0, 0.0, 0.0, 0.383, 0.924),
+            #     (1.4, 0.2, 0.0, 0.0, 0.0, 0.707, 0.707),
+            #     (0.4, -0.8, 0.0, 0.0, 0.0, 0.0, 1.0),
+            # ]
 
         self.index = -1
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
@@ -56,7 +63,7 @@ class SetpointPublisher(Node):
         pose.pose.orientation.w = q[3]
         self.publisher_.publish(pose)
 
-        if self.counter % 2000 == 0:
+        if self.counter % 1600 == 0:
             self.index = (self.index + 1) % len(self.setpoints)
             print(f"Publishing setpoint {self.index}: {self.setpoints[self.index]}")
         self.counter += 1

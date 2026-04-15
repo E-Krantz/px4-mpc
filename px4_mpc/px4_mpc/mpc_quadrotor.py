@@ -66,7 +66,7 @@ class QuadrotorMPC(Node):
         self.namespace_prefix = f'/{self.namespace}' if self.namespace else ''
 
         # Get setpoint from rviz (true/false)
-        self.setpoint_from_rviz = self.declare_parameter('setpoint_from_rviz', False).value
+        self.use_rviz = self.declare_parameter('use_rviz', False).value
 
         # QoS profiles
         qos_profile_pub = QoSProfile(
@@ -110,7 +110,7 @@ class QuadrotorMPC(Node):
             self.vehicle_local_position_callback,
             qos_profile_sub)
 
-        if self.setpoint_from_rviz:
+        if self.use_rviz:
             self.set_pose_srv = self.create_service(
                 SetPose,
                 'set_pose',

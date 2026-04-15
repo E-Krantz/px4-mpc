@@ -52,18 +52,18 @@ def generate_launch_description():
         description='Namespace for all nodes'
     )
 
-    setpoint_from_rviz_arg = DeclareLaunchArgument(
-        'setpoint_from_rviz',
+    use_rviz_arg = DeclareLaunchArgument(
+        'use_rviz',
         default_value='true',
         description='Publish setpoint pose via rviz'
     )
 
     namespace = LaunchConfiguration('namespace')
-    setpoint_from_rviz = LaunchConfiguration('setpoint_from_rviz')
+    use_rviz = LaunchConfiguration('use_rviz')
 
     return LaunchDescription([
         namespace_arg,
-        setpoint_from_rviz_arg,
+        use_rviz_arg,
         Node(
             package='px4_mpc',
             namespace=namespace,
@@ -73,7 +73,7 @@ def generate_launch_description():
             emulate_tty=True,
             parameters=[
                 {'namespace': namespace},
-                {'setpoint_from_rviz': setpoint_from_rviz}
+                {'use_rviz': use_rviz}
             ]
         ),
         Node(
@@ -84,7 +84,7 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             parameters=[{'namespace': namespace}],
-            condition=IfCondition(setpoint_from_rviz)
+            condition=IfCondition(use_rviz)
         ),
         # Node(
         #     package='micro_ros_agent',
@@ -98,7 +98,7 @@ def generate_launch_description():
             executable='visualizer',
             name='visualizer',
             parameters=[{'namespace': namespace}],
-            condition=IfCondition(setpoint_from_rviz)
+            condition=IfCondition(use_rviz)
         ),
         OpaqueFunction(function=launch_setup),
     ])
@@ -136,6 +136,6 @@ def launch_setup(context, *args, **kwargs):
             executable='rviz2',
             name='rviz2',
             arguments=['-d', patched_config],
-            condition=IfCondition(LaunchConfiguration('setpoint_from_rviz'))
+            condition=IfCondition(LaunchConfiguration('use_rviz'))
         )
     ]

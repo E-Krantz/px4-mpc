@@ -39,7 +39,9 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 import os
 import tempfile
@@ -58,10 +60,10 @@ def generate_launch_description():
         description='Namespace for all nodes'
     )
 
-    setpoint_from_rviz_arg = DeclareLaunchArgument(
-        'setpoint_from_rviz',
-        default_value='true',
-        description='Publish setpoint pose via rviz'
+    rviz_mode_arg = DeclareLaunchArgument(
+        'rviz_mode',
+        default_value='setpoint',
+        description='RViz and setpoint mode (off, viz, setpoint)'
     )
     px4_uses_ned_arg = DeclareLaunchArgument(
         'px4_uses_ned',
@@ -76,15 +78,18 @@ def generate_launch_description():
 
     mode = LaunchConfiguration('mode')
     namespace = LaunchConfiguration('namespace')
-    setpoint_from_rviz = LaunchConfiguration('setpoint_from_rviz')
+    rviz_mode = LaunchConfiguration('rviz_mode')
     px4_uses_ned = LaunchConfiguration('px4_uses_ned')
     camera = LaunchConfiguration('camera')
+
+    rviz_enabled = PythonExpression(["'", rviz_mode, "' in ['viz', 'setpoint']"])
+    rviz_setpoint_mode = PythonExpression(["'", rviz_mode, "' == 'setpoint'"])
 
     ld = LaunchDescription()
 
     ld.add_action(mode_arg)
     ld.add_action(namespace_arg)
-    ld.add_action(setpoint_from_rviz_arg)
+    ld.add_action(rviz_mode_arg)
     ld.add_action(px4_uses_ned_arg)
     ld.add_action(camera_arg)
     
@@ -97,7 +102,7 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=[
             {'mode': mode},
-            {'setpoint_from_rviz': setpoint_from_rviz},
+            {'use_rviz': ParameterValue(rviz_setpoint_mode, value_type=bool)},
             {'px4_uses_ned': px4_uses_ned},
             {'camera': camera}
         ]
@@ -110,7 +115,7 @@ def generate_launch_description():
         name='rviz_pos_marker',
         output='screen',
         emulate_tty=True,
-        condition=IfCondition(setpoint_from_rviz)
+        condition=IfCondition(rviz_setpoint_mode)
     ))
     
     ld.add_action(Node(
@@ -120,7 +125,7 @@ def generate_launch_description():
         name='test_setpoints',
         output='screen',
         emulate_tty=True,
-        condition=UnlessCondition(setpoint_from_rviz)
+        condition=UnlessCondition(rviz_setpoint_mode)
     ))
     
     ld.add_action(Node(
@@ -132,7 +137,7 @@ def generate_launch_description():
             {'px4_uses_ned': px4_uses_ned},
             {'camera': camera}
         ],
-        condition=IfCondition(setpoint_from_rviz)
+        condition=IfCondition(rviz_enabled)
     ))
     
     ld.add_action(OpaqueFunction(function=launch_setup))
@@ -178,6 +183,16 @@ def launch_setup(context, *args, **kwargs):
     """
     Function to set up the launch context and patch the RViz configuration.
     """
+    rviz_mode = LaunchConfiguration('rviz_mode').perform(context)
+    valid_modes = {'off', 'viz', 'setpoint'}
+    if rviz_mode not in valid_modes:
+        raise ValueError(
+            f"Invalid rviz_mode '{rviz_mode}'. Expected one of: {sorted(valid_modes)}"
+        )
+
+    if rviz_mode == 'off':
+        return []
+
     namespace = LaunchConfiguration('namespace').perform(context)
     rviz_config_path = os.path.join(get_package_share_directory('px4_mpc'), 'config.rviz')
     patched_config = patch_rviz_config(rviz_config_path, namespace)
@@ -189,6 +204,5 @@ def launch_setup(context, *args, **kwargs):
             executable='rviz2',
             name='rviz2',
             arguments=['-d', patched_config],
-            condition=IfCondition(LaunchConfiguration('setpoint_from_rviz'))
         )
     ]

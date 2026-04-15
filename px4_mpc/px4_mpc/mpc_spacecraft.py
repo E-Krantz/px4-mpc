@@ -45,7 +45,6 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDur
 from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import PoseStamped, Vector3Stamped
-from visualization_msgs.msg import Marker
 
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import VehicleStatus
@@ -73,7 +72,7 @@ class SpacecraftMPC(Node):
         self.use_ned = self.declare_parameter('px4_uses_ned', True).value
 
         # Get setpoint from rviz (true/false)
-        self.setpoint_from_rviz = self.declare_parameter('setpoint_from_rviz', False).value
+        self.use_rviz = self.declare_parameter('use_rviz', False).value
 
         # Camera mode (true/false)
         self.camera = self.declare_parameter('camera', False).value
@@ -140,27 +139,11 @@ class SpacecraftMPC(Node):
     def set_publishers_subscribers(self, qos_profile):
         # Subscribe to both using the same callback
         # - depending on PX4 version, one or the other will be used, but not both
-        self.status_sub_v3 = self.create_subscription(
-            VehicleStatus,
-            'fmu/out/vehicle_status_v3',
-            self.vehicle_status_callback,
-            qos_profile)
-        self.status_sub_v2 = self.create_subscription(
-            VehicleStatus,
-            'fmu/out/vehicle_status_v2',
-            self.vehicle_status_callback,
-            qos_profile)
-        self.status_sub_v1 = self.create_subscription(
-            VehicleStatus,
-            'fmu/out/vehicle_status_v1',
-            self.vehicle_status_callback,
-            qos_profile)
         self.status_sub = self.create_subscription(
             VehicleStatus,
-            'fmu/out/vehicle_status',
+            'fmu/out/vehicle_status_v4',
             self.vehicle_status_callback,
             qos_profile)
-
         self.attitude_sub = self.create_subscription(
             VehicleAttitude,
             'fmu/out/vehicle_attitude',
@@ -173,16 +156,11 @@ class SpacecraftMPC(Node):
             qos_profile)
         self.local_position_sub = self.create_subscription(
             VehicleLocalPosition,
-            'fmu/out/vehicle_local_position',
-            self.vehicle_local_position_callback,
-            qos_profile)
-        self.local_position_sub = self.create_subscription(
-            VehicleLocalPosition,
             'fmu/out/vehicle_local_position_v1',
             self.vehicle_local_position_callback,
             qos_profile)
 
-        if self.setpoint_from_rviz:
+        if self.use_rviz:
             self.set_pose_srv = self.create_service(
                 SetPose,
                 'set_pose',
@@ -225,7 +203,7 @@ class SpacecraftMPC(Node):
             'px4_mpc/predicted_path',
             10)
         self.reference_pub = self.create_publisher(
-            Marker,
+            PoseStamped,
             'px4_mpc/reference',
             10)
         if self.mode == 'offset_free_wrench':
@@ -300,29 +278,8 @@ class SpacecraftMPC(Node):
         self.vehicle_status_timestamp = self.get_clock().now().nanoseconds / 1e9
         self.nav_state = msg.nav_state
 
-    def publish_reference(self, pub, reference):
-        msg = Marker()
-        msg.action = Marker.ADD
-        msg.header.frame_id = "map"
-        # msg.header.stamp = Clock().now().nanoseconds / 1000
-        msg.ns = "arrow"
-        msg.id = 1
-        msg.type = Marker.SPHERE
-        msg.scale.x = 0.09
-        msg.scale.y = 0.09
-        msg.scale.z = 0.09
-        msg.color.r = 1.0
-        msg.color.g = 0.0
-        msg.color.b = 0.0
-        msg.color.a = 1.0
-        msg.pose.position.x = reference[0]
-        msg.pose.position.y = reference[1]
-        msg.pose.position.z = reference[2]
-        msg.pose.orientation.w = 1.0
-        msg.pose.orientation.x = 0.0
-        msg.pose.orientation.y = 0.0
-        msg.pose.orientation.z = 0.0
-
+    def publish_reference(self, pub, reference, attitude):
+        msg = self.vector2PoseMsg('map', reference, attitude)
         pub.publish(msg)
 
     def publish_rate_setpoint(self, u_pred):
@@ -583,7 +540,11 @@ class SpacecraftMPC(Node):
             predicted_path_msg.header = predicted_pose_msg.header
             predicted_path_msg.poses.append(predicted_pose_msg)
         self.predicted_path_pub.publish(predicted_path_msg)
-        self.publish_reference(self.reference_pub, self.setpoint_position)
+        self.publish_reference(
+            self.reference_pub,
+            self.setpoint_position,
+            self.setpoint_attitude,
+        )
 
         if self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             if self.mode == 'rate':
