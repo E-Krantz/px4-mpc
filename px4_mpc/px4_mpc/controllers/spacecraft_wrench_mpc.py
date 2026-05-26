@@ -123,28 +123,18 @@ class SpacecraftWrenchMPC():
         ocp.parameter_values = p_0
 
         # set constraints on U
-        ocp.constraints.lbu = np.array([-Fmax, -Fmax, -Fmax, -Tmax, -Tmax, -Tmax])
-        ocp.constraints.ubu = np.array([+Fmax, +Fmax, +Fmax, +Tmax, +Tmax, +Tmax])
+        ocp.constraints.lbu = np.array([-Fmax, -Fmax, -0, -0, -0, -Tmax])
+        ocp.constraints.ubu = np.array([+Fmax, +Fmax, +0, +0, +0, +Tmax])
         ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
-        # # set constraints on X
-        # ocp.constraints.lbx = np.array([0.3, -1.28, -5, -0.5, -0.5, -0.5, -1, -1, -1])
-        # ocp.constraints.ubx = np.array([+3.8, +1.44, +5, +0.5, +0.5, +0.5, +1, +1, +1])
-        # ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5, 10, 11, 12])
-
-        # # set constraints on X at the end of the horizon
-        # ocp.constraints.lbx_e = np.array([0.3, -1.28, -5, -0.5, -0.5, -0.5, -1, -1, -1])
-        # ocp.constraints.ubx_e = np.array([+3.8, +1.44, +5, +0.5, +0.5, +0.5, +1, +1, +1])
-        # ocp.constraints.idxbx_e = ocp.constraints.idxbx
-
         # set constraints on X
-        ocp.constraints.lbx = np.array([-0.5, -0.5, -1])
-        ocp.constraints.ubx = np.array([+0.5, +0.5, +1])
-        ocp.constraints.idxbx = np.array([3, 4, 12])
+        ocp.constraints.lbx = np.array([0.3, -1.28, -0.5, -0.5, -1])
+        ocp.constraints.ubx = np.array([+3.8, +1.44, +0.5, +0.5, +1])
+        ocp.constraints.idxbx = np.array([0, 1, 3, 4, 12])
 
         # set constraints on X at the end of the horizon
-        ocp.constraints.lbx_e = np.array([-0.5, -0.5, -1])
-        ocp.constraints.ubx_e = np.array([+0.5, +0.5, +1])
+        ocp.constraints.lbx_e = np.array([0.3, -1.28, -0.5, -0.5, -1])
+        ocp.constraints.ubx_e = np.array([+3.8, +1.44, +0.5, +0.5, +1])
         ocp.constraints.idxbx_e = ocp.constraints.idxbx
 
         # To constrain quaternion states, add indices 6–9 to idxbx/idxbx_e and set their bounds in lbx/ubx.
