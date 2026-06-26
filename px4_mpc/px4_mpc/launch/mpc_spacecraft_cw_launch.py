@@ -32,8 +32,8 @@
 #
 ############################################################################
 
-__author__ = "Pedro Roque, Jaeyoung Lim"
-__contact__ = "padr@kth.se, jalim@ethz.ch"
+__author__ = "Elias Krantz"
+__contact__ = "eliaskra@kth.se"
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -75,7 +75,7 @@ def generate_launch_description():
     )
     orbit_period_arg = DeclareLaunchArgument(
         'orbit_period',
-        default_value='90.0',
+        default_value='100.0',
         description='Period of the orbit in minutes'
     )
     skip_build_arg = DeclareLaunchArgument(

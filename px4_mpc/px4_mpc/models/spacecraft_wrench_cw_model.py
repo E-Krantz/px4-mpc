@@ -41,10 +41,10 @@ class SpacecraftWrenchCWModel():
         self.name = 'spacecraft_wrench_cw_model'
 
         # constants
-        self.mass = 21.0
-        self.inertia = np.diag([0.315]*3)
-        self.max_thrust = 2 * 1.5 * 2/3
-        self.max_torque = 4 * 0.12 * 1.5 * 1/3
+        self.mass = 20.0
+        self.inertia = np.diag([0.4]*3)
+        self.max_thrust = 2 * 1.2 * 2/3
+        self.max_torque = 4 * 0.12 * 1.2 * 1/3
 
         orbital_n = 2.0 * np.pi / (orbital_period * 60.0)
 

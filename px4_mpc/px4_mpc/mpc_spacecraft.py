@@ -157,6 +157,11 @@ class SpacecraftMPC(Node):
     def set_publishers_subscribers(self, qos_profile):
         # Subscribe to both using the same callback
         # - depending on PX4 version, one or the other will be used, but not both
+        self.status_sub_v4 = self.create_subscription(
+            VehicleStatus,
+            'fmu/out/vehicle_status_v4',
+            self.vehicle_status_callback,
+            qos_profile)
         self.status_sub_v3 = self.create_subscription(
             VehicleStatus,
             'fmu/out/vehicle_status_v3',
@@ -360,7 +365,7 @@ class SpacecraftMPC(Node):
         w_cmd = u_pred[0, 3:6]
 
         # The PX4 uses normalized force input. Scaling with respect to the maximum force.
-        F_scaling = 1/(2 * 1.5)
+        F_scaling = 1/(2 * 1.2)
         F_cmd *= F_scaling
 
         rates_setpoint_msg = VehicleRatesSetpoint()
@@ -376,8 +381,8 @@ class SpacecraftMPC(Node):
     def publish_wrench_setpoint(self, u_pred):
         # u_pred is [Fx, Fy, Fz, Tx, Ty, Tz]] in FLU frame
         # The PX4 uses normalized wrench input. Scaling with respect to the maximum force and torque.
-        F_scaling = 1/(2 * 1.5)
-        T_scaling = 1/(4 * 0.12 * 1.5)
+        F_scaling = 1/(2 * 1.2)
+        T_scaling = 1/(4 * 0.12 * 1.2)
         u_pred[0, :3] *= F_scaling
         u_pred[0, 3:6] *= T_scaling
 
@@ -417,8 +422,8 @@ class SpacecraftMPC(Node):
         self.publisher_direct_actuator.publish(actuator_outputs_msg)
 
     def publish_propeller_setpoint(self, u_pred):
-        min_thrust = -1.5
-        max_thrust = 1.5
+        min_thrust = -1.2
+        max_thrust = 1.2
         propeller_outputs_msg = Float32MultiArray()
         thrust_command = u_pred[0, :]
         thrust_command = np.clip(np.array(thrust_command, dtype=np.float32), min_thrust, max_thrust)
