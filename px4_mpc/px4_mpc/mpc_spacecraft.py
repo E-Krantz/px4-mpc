@@ -402,18 +402,24 @@ class SpacecraftMPC(Node):
         ret_val = True
         current_time = self.get_clock().now().nanoseconds / 1e9
 
+        namespace = self.get_namespace().strip('/')
+
         # Check if the data is valid based on the timestamps
         if (current_time - self.vehicle_attitude_timestamp > DATA_VALIDITY_STREAM):
             self.get_logger().warn("Vehicle attitude data is too old. Skipping offboard control...")
+            self.get_logger().warn(f"Missing topic: {namespace}/fmu/out/vehicle_attitude")
             ret_val = False
         if (current_time - self.vehicle_local_position_timestamp > DATA_VALIDITY_STREAM):
             self.get_logger().warn("Vehicle position data is too old. Skipping offboard control...")
+            self.get_logger().warn(f"Missing topic: {namespace}/fmu/out/vehicle_local_position")
             ret_val = False
         if (current_time - self.vehicle_angular_velocity_timestamp > DATA_VALIDITY_STREAM):
             self.get_logger().warn("Vehicle angular velocity data is too old. Skipping offboard control...")
+            self.get_logger().warn(f"Missing topic: {namespace}/fmu/out/vehicle_angular_velocity")
             ret_val = False
         if (current_time - self.vehicle_status_timestamp > DATA_VALIDITY_STATUS):
             self.get_logger().warn("Vehicle status data is too old. Skipping offboard control...")
+            self.get_logger().warn(f"Missing topic: {namespace}/fmu/out/vehicle_status")
             ret_val = False
 
         return ret_val
