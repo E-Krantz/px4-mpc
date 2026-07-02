@@ -287,7 +287,7 @@ class SpacecraftMPC(Node):
         w_cmd = u_pred[0, 3:6]
 
         # The PX4 uses normalized force input. Scaling with respect to the maximum force.
-        F_scaling = 1/(2 * 1.5)
+        F_scaling = 1/(2 * 1.2)
         F_cmd *= F_scaling
 
         rates_setpoint_msg = VehicleRatesSetpoint()
@@ -303,8 +303,8 @@ class SpacecraftMPC(Node):
     def publish_wrench_setpoint(self, u_pred):
         # u_pred is [Fx, Fy, Fz, Tx, Ty, Tz]] in FLU frame
         # The PX4 uses normalized wrench input. Scaling with respect to the maximum force and torque.
-        F_scaling = 1/(2 * 1.5)
-        T_scaling = 1/(4 * 0.12 * 1.5)
+        F_scaling = 1/(2 * 1.2)
+        T_scaling = 1/(4 * 0.12 * 1.2)
         u_pred[0, :3] *= F_scaling
         u_pred[0, 3:6] *= T_scaling
 

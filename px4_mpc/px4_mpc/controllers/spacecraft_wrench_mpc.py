@@ -74,7 +74,7 @@ class SpacecraftWrenchMPC():
         ocp.solver_options.N_horizon = N_horizon
 
         # set cost
-        Q_mat = [1e0, 1e0, 1e0,
+        Q_mat = [5e0, 5e0, 5e0,
                  1e1, 1e1, 1e1,
                  1e1, 1e1, 1e1,
                  1e1, 1e1, 1e1]
