@@ -27,6 +27,7 @@ setup(
                 'mpc_quadrotor = px4_mpc.mpc_quadrotor:main',
                 'mpc_spacecraft = px4_mpc.mpc_spacecraft:main',
                 'test_setpoints = px4_mpc.test.test_setpoints:main',
+                'test_inspection = px4_mpc.test.test_inspection:main',
                 'rviz_pos_marker = px4_mpc.rviz_pos_marker:main',
                 'visualizer = px4_mpc.visualizer:main',
         ],

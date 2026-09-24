@@ -51,6 +51,7 @@ from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleAttitude
 from px4_msgs.msg import VehicleAngularVelocity
 from px4_msgs.msg import VehicleLocalPosition
+from px4_msgs.msg import VehicleOdometry
 from px4_msgs.msg import VehicleRatesSetpoint
 from px4_msgs.msg import ActuatorMotors
 from px4_msgs.msg import VehicleTorqueSetpoint
@@ -77,16 +78,8 @@ class SpacecraftMPC(Node):
         # Camera mode (true/false)
         self.camera = self.declare_parameter('camera', False).value
 
-        # QoS profile
-        qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=1
-        )
-
         # Setup publishers and subscribers
-        self.set_publishers_subscribers(qos_profile)
+        self.set_publishers_subscribers()
 
         timer_period = 0.1  # seconds
         timer_period = 0.05 if self.mode == 'propeller' else timer_period
@@ -131,34 +124,35 @@ class SpacecraftMPC(Node):
         self.setpoint_attitude = np.array([1.0, 0.0, 0.0, 0.0])
 
         # Set initial timestamps
-        self.vehicle_attitude_timestamp = -np.inf
-        self.vehicle_local_position_timestamp = -np.inf
-        self.vehicle_angular_velocity_timestamp = -np.inf
         self.vehicle_status_timestamp = -np.inf
+        self.vehicle_odometry_timestamp = -np.inf
 
-    def set_publishers_subscribers(self, qos_profile):
-        # Subscribe to both using the same callback
-        # - depending on PX4 version, one or the other will be used, but not both
+    def set_publishers_subscribers(self):
+        # QoS profile
+        qos_fmu_in = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        qos_fmu_out = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
+        # Subscribers
         self.status_sub = self.create_subscription(
             VehicleStatus,
             'fmu/out/vehicle_status_v4',
             self.vehicle_status_callback,
-            qos_profile)
-        self.attitude_sub = self.create_subscription(
-            VehicleAttitude,
-            'fmu/out/vehicle_attitude',
-            self.vehicle_attitude_callback,
-            qos_profile)
-        self.angular_vel_sub = self.create_subscription(
-            VehicleAngularVelocity,
-            'fmu/out/vehicle_angular_velocity',
-            self.vehicle_angular_velocity_callback,
-            qos_profile)
-        self.local_position_sub = self.create_subscription(
-            VehicleLocalPosition,
-            'fmu/out/vehicle_local_position_v1',
-            self.vehicle_local_position_callback,
-            qos_profile)
+            qos_fmu_out)
+        self.odom_sub = self.create_subscription(
+            VehicleOdometry,
+            'fmu/out/vehicle_odometry',
+            self.vehicle_odometry_callback,
+            qos_fmu_out)
 
         if self.use_rviz:
             self.set_pose_srv = self.create_service(
@@ -174,26 +168,27 @@ class SpacecraftMPC(Node):
                 0
             )
 
+        # Publishers
         self.publisher_offboard_mode = self.create_publisher(
             OffboardControlMode,
             'fmu/in/offboard_control_mode',
-            qos_profile)
+            qos_fmu_in)
         self.publisher_rates_setpoint = self.create_publisher(
             VehicleRatesSetpoint,
             'fmu/in/vehicle_rates_setpoint',
-            qos_profile)
+            qos_fmu_in)
         self.publisher_direct_actuator = self.create_publisher(
             ActuatorMotors,
             'fmu/in/actuator_motors',
-            qos_profile)
+            qos_fmu_in)
         self.publisher_thrust_setpoint = self.create_publisher(
             VehicleThrustSetpoint,
             'fmu/in/vehicle_thrust_setpoint',
-            qos_profile)
+            qos_fmu_in)
         self.publisher_torque_setpoint = self.create_publisher(
             VehicleTorqueSetpoint,
             'fmu/in/vehicle_torque_setpoint',
-            qos_profile)
+            qos_fmu_in)
         self.publisher_propeller_setpoint = self.create_publisher(
             Float32MultiArray,
             'prop_plate/external_motor_cmd',
@@ -210,68 +205,51 @@ class SpacecraftMPC(Node):
             self.disturbance_rotation_pub = self.create_publisher(
                 Vector3Stamped,
                 'px4_mpc/translation_d_hat',
-                qos_profile)
+                10)
 
             self.disturbance_translation_pub = self.create_publisher(
                 Vector3Stamped,
                 'px4_mpc/attitude_d_hat',
-                qos_profile)
+                10)
 
         if self.sitl:
             self.odom_pub = self.create_publisher(
                 Odometry,
                 'odom',
-                qos_profile)
+                10)
         return
 
-    def vehicle_attitude_callback(self, msg):
+    def vehicle_odometry_callback(self, msg: VehicleOdometry):
         # Store message arrival time in ROS clock domain for validity checking
-        self.vehicle_attitude_timestamp = self.get_clock().now().nanoseconds / 1e9
-        
+        self.vehicle_odometry_timestamp = self.get_clock().now().nanoseconds / 1e9
+
         if self.use_ned:
             # NED-> ENU transformation
-            # Receives quaternion in NED frame as (qw, qx, qy, qz)
+            self.vehicle_local_position[0] = msg.position[1]
+            self.vehicle_local_position[1] = msg.position[0]
+            self.vehicle_local_position[2] = -msg.position[2]
+            self.vehicle_local_velocity[0] = msg.velocity[1]
+            self.vehicle_local_velocity[1] = msg.velocity[0]
+            self.vehicle_local_velocity[2] = -msg.velocity[2]
+            self.vehicle_angular_velocity[0] = msg.angular_velocity[0]
+            self.vehicle_angular_velocity[1] = -msg.angular_velocity[1]
+            self.vehicle_angular_velocity[2] = -msg.angular_velocity[2]
             q_enu = 1/np.sqrt(2) * np.array([msg.q[0] + msg.q[3], msg.q[1] + msg.q[2], msg.q[1] - msg.q[2], msg.q[0] - msg.q[3]])
             q_enu /= np.linalg.norm(q_enu)
             self.vehicle_attitude = q_enu.astype(float)
         else:
+            self.vehicle_local_position[0] = msg.position[0]
+            self.vehicle_local_position[1] = msg.position[1]
+            self.vehicle_local_position[2] = msg.position[2]
+            self.vehicle_local_velocity[0] = msg.velocity[0]
+            self.vehicle_local_velocity[1] = msg.velocity[1]
+            self.vehicle_local_velocity[2] = msg.velocity[2]
+            self.vehicle_angular_velocity[0] = msg.angular_velocity[0]
+            self.vehicle_angular_velocity[1] = msg.angular_velocity[1]
+            self.vehicle_angular_velocity[2] = msg.angular_velocity[2]
             q = np.array([msg.q[0], msg.q[1], msg.q[2], msg.q[3]])
             q /= np.linalg.norm(q)
             self.vehicle_attitude = q.astype(float)
-
-    def vehicle_local_position_callback(self, msg):
-        # Store message arrival time in ROS clock domain for validity checking
-        self.vehicle_local_position_timestamp = self.get_clock().now().nanoseconds / 1e9
-        
-        if self.use_ned:
-            # NED-> ENU transformation
-            self.vehicle_local_position[0] = msg.y
-            self.vehicle_local_position[1] = msg.x
-            self.vehicle_local_position[2] = -msg.z
-            self.vehicle_local_velocity[0] = msg.vy
-            self.vehicle_local_velocity[1] = msg.vx
-            self.vehicle_local_velocity[2] = -msg.vz
-        else:
-            self.vehicle_local_position[0] = msg.x
-            self.vehicle_local_position[1] = msg.y
-            self.vehicle_local_position[2] = msg.z
-            self.vehicle_local_velocity[0] = msg.vx
-            self.vehicle_local_velocity[1] = msg.vy
-            self.vehicle_local_velocity[2] = msg.vz
-
-    def vehicle_angular_velocity_callback(self, msg):
-        # Store message arrival time in ROS clock domain for validity checking
-        self.vehicle_angular_velocity_timestamp = self.get_clock().now().nanoseconds / 1e9
-        
-        if self.use_ned:
-            # NED-> ENU transformation
-            self.vehicle_angular_velocity[0] = msg.xyz[0]
-            self.vehicle_angular_velocity[1] = -msg.xyz[1]
-            self.vehicle_angular_velocity[2] = -msg.xyz[2]
-        else:
-            self.vehicle_angular_velocity[0] = msg.xyz[0]
-            self.vehicle_angular_velocity[1] = msg.xyz[1]
-            self.vehicle_angular_velocity[2] = msg.xyz[2]
 
     def vehicle_status_callback(self, msg):
         # Store message arrival time in ROS clock domain for validity checking
@@ -405,17 +383,9 @@ class SpacecraftMPC(Node):
         namespace = self.get_namespace().strip('/')
 
         # Check if the data is valid based on the timestamps
-        if (current_time - self.vehicle_attitude_timestamp > DATA_VALIDITY_STREAM):
-            self.get_logger().warn("Vehicle attitude data is too old. Skipping offboard control...")
-            self.get_logger().warn(f"Missing topic: {namespace}/fmu/out/vehicle_attitude")
-            ret_val = False
-        if (current_time - self.vehicle_local_position_timestamp > DATA_VALIDITY_STREAM):
-            self.get_logger().warn("Vehicle position data is too old. Skipping offboard control...")
-            self.get_logger().warn(f"Missing topic: {namespace}/fmu/out/vehicle_local_position")
-            ret_val = False
-        if (current_time - self.vehicle_angular_velocity_timestamp > DATA_VALIDITY_STREAM):
-            self.get_logger().warn("Vehicle angular velocity data is too old. Skipping offboard control...")
-            self.get_logger().warn(f"Missing topic: {namespace}/fmu/out/vehicle_angular_velocity")
+        if (current_time - self.vehicle_odometry_timestamp > DATA_VALIDITY_STREAM):
+            self.get_logger().warn("Vehicle odometry data is too old. Skipping offboard control...")
+            self.get_logger().warn(f"Missing topic: {namespace}/fmu/out/vehicle_odometry")
             ret_val = False
         if (current_time - self.vehicle_status_timestamp > DATA_VALIDITY_STATUS):
             self.get_logger().warn("Vehicle status data is too old. Skipping offboard control...")

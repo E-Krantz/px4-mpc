@@ -155,7 +155,11 @@ def generate_launch_description():
         package='tf2_ros',
         executable='static_transform_publisher',
         name='static_tf_world_to_camera',
-        arguments=['2', '1.9', '2.3', '0.3010647', '0.3013046', '-0.6395013', '0.6400107', 'map', 'camera_link'], # camera 2
+        arguments=[
+                '--x', '2.0', '--y', '1.9', '--z', '2.3',
+                '--roll', '0.0', '--pitch', '0.86', '--yaw', '-1.56',
+                '--frame-id', 'map', '--child-frame-id', 'camera_link',
+            ],
         condition=IfCondition(camera)
     ))
 
