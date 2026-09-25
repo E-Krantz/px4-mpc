@@ -115,7 +115,7 @@ class SpacecraftMPC(Node):
     def _setup_parameters(self):
         self.declare_parameter('mode', 'wrench')
         self.declare_parameter('px4_uses_ned', True)
-        self.declare_parameter('setpoint_from_rviz', True)
+        self.declare_parameter('rviz_mode', 'setpoint')
         self.declare_parameter('skip_build', False)
         self.declare_parameter('kthspace_constraints', False)
         self.declare_parameter('sitl', False)
@@ -124,8 +124,11 @@ class SpacecraftMPC(Node):
         self.get_logger().info(f"Mode: {self.mode}")
         self.use_ned = self.get_parameter('px4_uses_ned').get_parameter_value().bool_value
         self.get_logger().info(f"PX4 uses NED frame: {self.use_ned}")
-        self.setpoint_from_rviz = self.get_parameter('setpoint_from_rviz').get_parameter_value().bool_value
-        self.get_logger().info(f"Setpoint from RViz: {self.setpoint_from_rviz}")
+        self.rviz_mode = self.get_parameter('rviz_mode').get_parameter_value().string_value
+        if self.rviz_mode not in ('off', 'viz', 'setpoint'):
+            raise ValueError(f"Invalid rviz_mode: {self.rviz_mode} (expected off, viz or setpoint)")
+        self.get_logger().info(f"RViz mode: {self.rviz_mode}")
+        self.setpoint_from_rviz = self.rviz_mode == 'setpoint'
         self.skip_build = self.get_parameter('skip_build').get_parameter_value().bool_value
         self.get_logger().info(f"Skip acados build: {self.skip_build}")
         self.kthspace_constraints = self.get_parameter('kthspace_constraints').get_parameter_value().bool_value
