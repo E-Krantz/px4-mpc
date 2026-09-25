@@ -46,71 +46,111 @@ import tempfile
 
 
 def generate_launch_description():
-    mode_arg = DeclareLaunchArgument(
-        'mode',
-        default_value='wrench',
-        description='Mode of the controller (rate, wrench, direct_allocation)'
-    )
-
     namespace_arg = DeclareLaunchArgument(
         'namespace',
         default_value='',
         description='Namespace for all nodes'
     )
-
+    mode_arg = DeclareLaunchArgument(
+        'mode',
+        default_value='wrench',
+        description='Mode of the controller (rate, wrench, direct_allocation, propeller)'
+    )
+    px4_uses_ned_arg = DeclareLaunchArgument(
+        'px4_uses_ned',
+        default_value='true',
+        description='PX4 uses NED frame (default: true) or ENU frame (false)'
+    )
     setpoint_from_rviz_arg = DeclareLaunchArgument(
         'setpoint_from_rviz',
         default_value='true',
         description='Publish setpoint pose via rviz'
     )
+    skip_build_arg = DeclareLaunchArgument(
+        'skip_build',
+        default_value='false',
+        description='Skip acados build (default: false)'
+    )
+    kthspace_constraints_arg = DeclareLaunchArgument(
+        'kthspace_constraints',
+        default_value='false',
+        description='Use KTH Space Lab constraints (default: false)'
+    )
+    sitl_arg = DeclareLaunchArgument(
+        'sitl',
+        default_value='false',
+        description='Running in SITL (default: false)'
+    )
 
-    mode = LaunchConfiguration('mode')
     namespace = LaunchConfiguration('namespace')
+    mode = LaunchConfiguration('mode')
+    px4_uses_ned = LaunchConfiguration('px4_uses_ned')
     setpoint_from_rviz = LaunchConfiguration('setpoint_from_rviz')
+    skip_build = LaunchConfiguration('skip_build')
+    kthspace_constraints = LaunchConfiguration('kthspace_constraints')
+    sitl = LaunchConfiguration('sitl')
 
-    return LaunchDescription([
-        mode_arg,
-        namespace_arg,
-        setpoint_from_rviz_arg,
-        Node(
-            package='px4_mpc',
-            namespace=namespace,
-            executable='mpc_spacecraft',
-            name='mpc_spacecraft',
-            output='screen',
-            emulate_tty=True,
-            parameters=[
-                {'mode': mode},
-                {'setpoint_from_rviz': setpoint_from_rviz}
-            ]
-        ),
-        Node(
-            package='px4_mpc',
-            namespace=namespace,
-            executable='rviz_pos_marker',
-            name='rviz_pos_marker',
-            output='screen',
-            emulate_tty=True,
-            condition=IfCondition(setpoint_from_rviz)
-        ),
-        Node(
-            package='px4_mpc',
-            namespace=namespace,
-            executable='test_setpoints',
-            name='test_setpoints',
-            output='screen',
-            emulate_tty=True,
-            condition=UnlessCondition(setpoint_from_rviz)
-        ),
-        Node(
-            package='px4_offboard',
-            namespace=namespace,
-            executable='visualizer',
-            name='visualizer',
-            condition=IfCondition(setpoint_from_rviz)
-        ),
-        OpaqueFunction(function=launch_setup),
-    ])
+    ld = LaunchDescription()
+
+    ld.add_action(namespace_arg)
+    ld.add_action(mode_arg)
+    ld.add_action(px4_uses_ned_arg)
+    ld.add_action(setpoint_from_rviz_arg)
+    ld.add_action(skip_build_arg)
+    ld.add_action(kthspace_constraints_arg)
+    ld.add_action(sitl_arg)
+
+    ld.add_action(Node(
+        package='px4_mpc',
+        namespace=namespace,
+        executable='mpc_spacecraft',
+        name='mpc_spacecraft',
+        output='screen',
+        emulate_tty=True,
+        parameters=[
+            {'mode': mode},
+            {'px4_uses_ned': px4_uses_ned},
+            {'setpoint_from_rviz': setpoint_from_rviz},
+            {'skip_build': skip_build},
+            {'kthspace_constraints': kthspace_constraints},
+            {'sitl': sitl}
+        ]
+    ))
+
+    ld.add_action(Node(
+        package='px4_mpc',
+        namespace=namespace,
+        executable='rviz_pos_marker',
+        name='rviz_pos_marker',
+        output='screen',
+        emulate_tty=True,
+        condition=IfCondition(setpoint_from_rviz)
+    ))
+    
+    ld.add_action(Node(
+        package='px4_mpc',
+        namespace=namespace,
+        executable='test_setpoints',
+        name='test_setpoints',
+        output='screen',
+        emulate_tty=True,
+        condition=UnlessCondition(setpoint_from_rviz)
+    ))
+    
+    ld.add_action(Node(
+        package='px4_offboard',
+        namespace=namespace,
+        executable='visualizer',
+        name='visualizer',
+        condition=IfCondition(setpoint_from_rviz),
+        parameters=[
+            {'px4_uses_ned': px4_uses_ned},
+        ]
+    ))
+    
+    ld.add_action(OpaqueFunction(function=launch_setup))
+
+    return ld
 
 def patch_rviz_config(original_config_path, namespace):
     """
@@ -138,7 +178,7 @@ def launch_setup(context, *args, **kwargs):
     rviz_config_path = os.path.join(get_package_share_directory('px4_mpc'), 'config.rviz')
     patched_config = patch_rviz_config(rviz_config_path, namespace)
 
-    return [
+    actions = [
         Node(
             package='rviz2',
             namespace='',
@@ -148,3 +188,21 @@ def launch_setup(context, *args, **kwargs):
             condition=IfCondition(LaunchConfiguration('setpoint_from_rviz'))
         )
     ]
+
+    # Package for propeller plate interface (only resolved in propeller mode)
+    if LaunchConfiguration('mode').perform(context) == 'propeller':
+        config = os.path.join(
+            get_package_share_directory("propeller_plate_iface"),
+            "config",
+            "parameters.yaml",
+        )
+        actions.append(Node(
+            package="propeller_plate_iface",
+            executable="propeller_plate_iface_node",
+            name="propeller_plate_iface_node",
+            namespace=namespace,
+            output="screen",
+            parameters=[config],
+        ))
+
+    return actions
