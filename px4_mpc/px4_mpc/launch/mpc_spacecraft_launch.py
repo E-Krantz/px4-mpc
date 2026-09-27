@@ -39,6 +39,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 import os
 import tempfile
@@ -110,7 +111,7 @@ def generate_launch_description():
         parameters=[
             {'mode': mode},
             {'px4_uses_ned': px4_uses_ned},
-            {'rviz_mode': rviz_mode},
+            {'rviz_mode': ParameterValue(rviz_mode, value_type=str)},
             {'skip_build': skip_build},
             {'kthspace_constraints': kthspace_constraints},
             {'sitl': sitl}
