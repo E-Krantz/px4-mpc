@@ -50,11 +50,23 @@ git clone https://github.com/PX4/px4_msgs.git              # PX4 messages for co
 git clone https://github.com/DISCOWER/px4-offboard.git     # RViz interface and setpoint generation
 git clone https://github.com/DISCOWER/px4-mpc.git          # this package
 cd ..
+```
+
+Install the remaining dependencies (ROS 2 packages, NumPy, SciPy, CasADi, python-control, ...) with [rosdep](https://docs.ros.org/en/humble/Tutorials/Intermediate/Rosdep.html). If you have never used rosdep before, run `sudo rosdep init` first.
+```bash
+rosdep update
+rosdep install --from-paths src --ignore-src -y
+```
+
+Build the workspace:
+```bash
 colcon build --packages-up-to px4_mpc
 source install/setup.bash  # use setup.zsh for zsh users
 ```
 
-For the `propeller` control mode, also clone [atmos_propeller_plate_interface](https://github.com/DISCOWER/atmos_propeller_plate_interface) into `~/ros2_ws/src` and build it:
+> **Note:** rosdep does not install acados. Install it and its Python interface as described in [Prerequisites](#prerequisites).
+
+For the `propeller` control mode, also clone [atmos_propeller_plate_interface](https://github.com/DISCOWER/atmos_propeller_plate_interface) into `~/ros2_ws/src`, rerun the `rosdep install` command above, and build it:
 ```bash
 colcon build --packages-up-to px4_mpc propeller_plate_iface
 ```
